@@ -295,3 +295,15 @@ th {
   font-style: italic;
   font-size: 0.9rem;
 }
+#header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#header-logo {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0px 0px 2px rgba(255, 255, 255, 0.3)); /* Leichtes Leuchten, damit es auf dunklem Blau heraussticht */
+}
