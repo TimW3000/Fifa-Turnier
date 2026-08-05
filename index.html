@@ -15,14 +15,17 @@
   <!-- ROLLEN- / LOGIN-MODAL -->
   <div id="role-selection-modal" class="modal-overlay">
     <div class="modal-content">
-      <h2> Willkommen beim FAL FIFA Turnier!</h2>
+      <!-- Vereins-Logo im Begrüßungsscreen -->
+      <img src="https://spvgg-fal.de/templates/yootheme/cache/dc/Logo-2017-web-dc30d58a.webp" class="modal-logo" alt="SpVgg FAL Logo">
+      
+      <h2>Willkommen beim FAL FIFA Turnier!</h2>
       <p style="margin-bottom: 20px; opacity: 0.9;">Bitte wähle aus, wie du fortfahren möchtest:</p>
       
       <!-- Schritt 1: Hauptauswahl -->
       <div id="role-options">
         <button class="btn-primary role-btn" id="btn-show-existing">👤 Ich habe mich bereits eingetragen</button>
-        <button class="btn-secondary role-btn" id="btn-show-new">➕ Mitspielen</button>
-        <button class="btn-secondary role-btn" id="btn-enter-spectator" style="margin-top: 15px; opacity: 0.8;">👁️Zuschauer</button>
+        <button class="btn-secondary role-btn" id="btn-show-new">➕ Ich bin neu hier / Jetzt eintragen</button>
+        <button class="btn-secondary role-btn" id="btn-enter-spectator" style="margin-top: 15px; opacity: 0.8;">👁️ Nur als Zuschauer reinschauen</button>
       </div>
 
       <!-- Schritt 2a: Bereits existierende Spieler -->
