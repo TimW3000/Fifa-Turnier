@@ -1,0 +1,234 @@
+:root {
+  --fal-blue-dark: #0b192c;
+  --fal-blue-primary: #1e3e62;
+  --fal-blue-light: #000000;
+  --fal-yellow: #ffc800;
+  --fal-white: #ffffff;
+  --fal-red: #ff4d4d;
+  --fal-gray: #2a2a2a;
+}
+
+* {
+  box-sizing: border-box;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+  background-color: var(--fal-blue-dark);
+  color: var(--fal-white);
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Modal / Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--fal-blue-primary);
+  padding: 25px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 450px;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  border: 1px solid var(--fal-yellow);
+}
+
+/* Header & Nav */
+header {
+  background-color: var(--fal-blue-primary);
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--fal-yellow);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--fal-yellow);
+}
+
+nav {
+  display: flex;
+  background-color: #081220;
+  border-bottom: 1px solid var(--fal-blue-primary);
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px;
+  background: none;
+  border: none;
+  color: var(--fal-white);
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s;
+  border-bottom: 3px solid transparent;
+}
+
+.tab-btn.active {
+  color: var(--fal-yellow);
+  border-bottom-color: var(--fal-yellow);
+  background: rgba(255, 200, 0, 0.05);
+}
+
+main {
+  padding: 20px;
+  max-width: 1000px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* Buttons & Inputs */
+button {
+  cursor: pointer;
+  border-radius: 6px;
+  font-weight: bold;
+  transition: 0.2s;
+}
+
+.role-btn {
+  width: 100%;
+  padding: 12px;
+  margin: 6px 0;
+  font-size: 1em;
+}
+
+.btn-primary {
+  background-color: var(--fal-yellow);
+  color: #000;
+  border: none;
+  padding: 8px 14px;
+}
+
+.btn-primary:hover {
+  background-color: #e6b400;
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: var(--fal-white);
+  border: 1px solid var(--fal-white);
+  padding: 8px 14px;
+}
+
+.btn-danger {
+  background-color: var(--fal-red);
+  color: white;
+  border: none;
+  padding: 8px 14px;
+}
+
+.btn-sm {
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
+
+input[type="text"], input[type="password"], input[type="number"] {
+  background: #081220;
+  border: 1px solid var(--fal-blue-primary);
+  color: white;
+  padding: 8px;
+  border-radius: 6px;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--fal-yellow);
+}
+
+/* Cards & Grid */
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.admin-card {
+  background: var(--fal-blue-primary);
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.highlight-me {
+  border: 2px solid var(--fal-yellow) !important;
+  box-shadow: 0 0 10px rgba(255, 200, 0, 0.2);
+}
+
+/* Tabellen */
+.table-container {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+th, td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+th {
+  color: var(--fal-yellow);
+}
+
+/* Match Cards */
+.match-card {
+  background: var(--fal-blue-primary);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.court-badge {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.court-main {
+  background-color: #2e7d32;
+  color: white;
+}
+
+.court-side {
+  background-color: #1565c0;
+  color: white;
+}
+
+.empty-state {
+  opacity: 0.6;
+  font-style: italic;
+}

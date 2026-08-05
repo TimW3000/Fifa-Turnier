@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FAL FIFA Turnier</title>
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Firebase App & Database SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+</head>
+<body>
+
+  <!-- ROLLEN- / LOGIN-MODAL -->
+  <div id="role-selection-modal" class="modal-overlay">
+    <div class="modal-content">
+      <h2> Willkommen beim FAL FIFA Turnier!</h2>
+      <p style="margin-bottom: 20px; opacity: 0.9;">Bitte wähle aus, wie du fortfahren möchtest:</p>
+      
+      <!-- Schritt 1: Hauptauswahl -->
+      <div id="role-options">
+        <button class="btn-primary role-btn" id="btn-show-existing">👤 Ich habe mich bereits eingetragen</button>
+        <button class="btn-secondary role-btn" id="btn-show-new">➕ Ich bin neu hier / Jetzt eintragen</button>
+        <button class="btn-secondary role-btn" id="btn-enter-spectator" style="margin-top: 15px; opacity: 0.8;">👁️ Nur als Zuschauer reinschauen</button>
+      </div>
+
+      <!-- Schritt 2a: Bereits existierende Spieler -->
+      <div id="existing-players-select" style="display: none;">
+        <h3>Wähle deinen Namen aus:</h3>
+        <div id="existing-players-list" style="max-height: 200px; overflow-y: auto; margin-bottom: 15px;"></div>
+        <button class="btn-secondary btn-reset-role"> Zurück</button>
+      </div>
+
+      <!-- Schritt 2b: Neuer Spieler -->
+      <div id="new-player-select" style="display: none;">
+        <h3>Neuen Spieler eintragen</h3>
+        <input type="text" id="self-player-name" placeholder="Dein Name..." style="width: 100%; margin-bottom: 10px;">
+        <button class="btn-primary role-btn" id="btn-register-new">Eintragen & Weiter</button>
+        <button class="btn-secondary btn-reset-role" style="margin-top: 5px;"> Zurück</button>
+      </div>
+
+      <!-- Schritt 2c: Passwort-Eingabe (für Admin / Geschützte Accounts) -->
+      <div id="admin-password-select" style="display: none;">
+        <h3 id="password-prompt-text">🔒 Bitte Passwort eingeben</h3>
+        <input type="password" id="admin-password-input" placeholder="Passwort..." style="width: 100%; margin-bottom: 10px;">
+        <button class="btn-primary role-btn" id="btn-confirm-admin">Bestätigen</button>
+        <button class="btn-secondary btn-reset-role" style="margin-top: 5px;"> Zurück</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HEADER & APP CONTAINER -->
+  <header id="app-header" style="display: none;">
+    <h1>⚽ FAL FIFA Turnier ⚽</h1>
+    <div id="user-badge-container">
+      <span id="user-badge"></span>
+      <button class="btn-secondary btn-sm" id="btn-switch-user" style="margin-left: 10px;">Wechseln</button>
+    </div>
+  </header>
+
+  <nav id="app-nav" style="display: none;">
+    <button class="tab-btn active" id="btn-teams" onclick="showTab('teams')">👥 Teams</button>
+    <button class="tab-btn" id="btn-groups" onclick="showTab('groups')">📊 Gruppen</button>
+    <button class="tab-btn" id="btn-matches" onclick="showTab('matches')">⚔️ Spiele</button>
+    <button class="tab-btn" id="btn-admin" onclick="showTab('admin')" style="display: none;">⚙️ Admin</button>
+  </nav>
+
+  <main id="app-main" style="display: none;">
+    <!-- TEAMS TAB -->
+    <section id="tab-teams" class="tab-content active">
+      <h2>Angemeldete Teams</h2>
+      <div id="teams-container" class="grid-container"></div>
+    </section>
+
+    <!-- GRUPPEN TAB -->
+    <section id="tab-groups" class="tab-content">
+      <h2>Gruppenphase & Tabellen</h2>
+      <div id="groups-container" class="grid-container"></div>
+    </section>
+
+    <!-- SPIELE TAB -->
+    <section id="tab-matches" class="tab-content">
+      <h2>Spielplan & Ergebnisse</h2>
+      
+      <h3>Gruppenspiele</h3>
+      <div id="group-matches-list"></div>
+
+      <hr style="margin: 30px 0; border: 0; border-top: 1px solid var(--fal-blue-light);">
+
+      <h3>KO-Phase</h3>
+      <div id="ko-matches-list"></div>
+    </section>
+
+    <!-- ADMIN TAB -->
+    <section id="tab-admin" class="tab-content">
+      <h2>Admin-Bereich</h2>
+      
+      <div class="admin-card">
+        <h3>Spieler verwalten</h3>
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+          <input type="text" id="new-player-name" placeholder="Spielername eingeben...">
+          <button class="btn-primary" onclick="addPlayer()">Hinzufügen</button>
+        </div>
+        <div id="admin-player-list"></div>
+      </div>
+
+      <div class="admin-card">
+        <h3>Turnier-Steuerung</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+          <button class="btn-primary" onclick="drawTeams()">🎲 2er-Teams auslosen</button>
+          <button class="btn-primary" onclick="drawGroups()">📊 Gruppen & Spielplan erstellen</button>
+          <button class="btn-primary" onclick="drawKOPhase()">⚔️ Viertelfinale auslosen</button>
+          <button class="btn-danger" onclick="resetTournament()">🗑️ Turnier komplett zurücksetzen</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
