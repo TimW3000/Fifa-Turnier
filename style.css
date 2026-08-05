@@ -65,6 +65,18 @@ header {
   gap: 8px;
 }
 
+#header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#header-logo {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+}
+
 header h1 {
   margin: 0;
   font-size: 1.2rem;
@@ -133,7 +145,7 @@ main {
   margin-top: 15px;
 }
 
-/* Buttons & Inputs für Mobilgeräte (Finger-Freundlich) */
+/* Buttons & Inputs für Mobilgeräte */
 button {
   cursor: pointer;
   border-radius: 8px;
@@ -189,7 +201,7 @@ input[type="text"], input[type="password"], input[type="number"] {
   color: white;
   padding: 10px;
   border-radius: 8px;
-  font-size: 16px; /* 16px verhindert automatisches Zoomen auf iOS Safari! */
+  font-size: 16px; /* Verhindert Auto-Zoom auf iOS */
 }
 
 input:focus {
