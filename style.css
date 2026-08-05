@@ -10,7 +10,8 @@
 
 * {
   box-sizing: border-box;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -21,75 +22,93 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  font-size: 15px;
 }
 
 /* Modal / Overlay */
 .modal-overlay {
   position: fixed;
   top: 0; left: 0; width: 100%; height: 100%;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(0, 0, 0, 0.88);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
+  padding: 15px;
 }
 
 .modal-content {
   background: var(--fal-blue-primary);
-  padding: 25px;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 450px;
+  padding: 20px;
+  border-radius: 14px;
+  width: 100%;
+  max-width: 400px;
   text-align: center;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.6);
   border: 1px solid var(--fal-yellow);
+}
+
+.modal-content h2 {
+  font-size: 1.3rem;
+  margin-top: 5px;
 }
 
 /* Header & Nav */
 header {
   background-color: var(--fal-blue-primary);
-  padding: 15px 20px;
+  padding: 12px 15px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-bottom: 2px solid var(--fal-yellow);
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 header h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   color: var(--fal-yellow);
+}
+
+#user-badge-container {
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
 }
 
 nav {
   display: flex;
   background-color: #081220;
   border-bottom: 1px solid var(--fal-blue-primary);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .tab-btn {
   flex: 1;
-  padding: 12px;
+  padding: 12px 5px;
   background: none;
   border: none;
   color: var(--fal-white);
   font-weight: bold;
+  font-size: 0.9rem;
   cursor: pointer;
   transition: 0.2s;
   border-bottom: 3px solid transparent;
+  text-align: center;
 }
 
 .tab-btn.active {
   color: var(--fal-yellow);
   border-bottom-color: var(--fal-yellow);
-  background: rgba(255, 200, 0, 0.05);
+  background: rgba(255, 200, 0, 0.08);
 }
 
 main {
-  padding: 20px;
-  max-width: 1000px;
+  padding: 12px;
+  max-width: 800px;
   margin: 0 auto;
   width: 100%;
 }
@@ -102,57 +121,75 @@ main {
   display: block;
 }
 
-/* Buttons & Inputs */
+.tab-content h2 {
+  font-size: 1.2rem;
+  margin-top: 5px;
+  margin-bottom: 15px;
+}
+
+.tab-content h3 {
+  font-size: 1.05rem;
+  color: var(--fal-yellow);
+  margin-top: 15px;
+}
+
+/* Buttons & Inputs für Mobilgeräte (Finger-Freundlich) */
 button {
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 8px;
   font-weight: bold;
   transition: 0.2s;
+  touch-action: manipulation;
 }
 
 .role-btn {
   width: 100%;
-  padding: 12px;
+  padding: 14px;
   margin: 6px 0;
-  font-size: 1em;
+  font-size: 0.95em;
 }
 
 .btn-primary {
   background-color: var(--fal-yellow);
   color: #000;
   border: none;
-  padding: 8px 14px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
 }
 
-.btn-primary:hover {
-  background-color: #e6b400;
+.btn-primary:active {
+  transform: scale(0.98);
 }
 
 .btn-secondary {
   background-color: transparent;
   color: var(--fal-white);
   border: 1px solid var(--fal-white);
-  padding: 8px 14px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
 }
 
 .btn-danger {
   background-color: var(--fal-red);
   color: white;
   border: none;
-  padding: 8px 14px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
 }
 
 .btn-sm {
-  padding: 4px 8px;
-  font-size: 0.85rem;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  border-radius: 6px;
 }
 
 input[type="text"], input[type="password"], input[type="number"] {
   background: #081220;
   border: 1px solid var(--fal-blue-primary);
   color: white;
-  padding: 8px;
-  border-radius: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 16px; /* 16px verhindert automatisches Zoomen auf iOS Safari! */
 }
 
 input:focus {
@@ -163,57 +200,70 @@ input:focus {
 /* Cards & Grid */
 .grid-container {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 15px;
-  margin-top: 15px;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+@media (min-width: 600px) {
+  .grid-container {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
 }
 
 .admin-card {
   background: var(--fal-blue-primary);
-  padding: 15px;
-  border-radius: 8px;
-  margin-bottom: 15px;
-  border: 1px solid rgba(255,255,255,0.05);
+  padding: 14px;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 .highlight-me {
   border: 2px solid var(--fal-yellow) !important;
-  box-shadow: 0 0 10px rgba(255, 200, 0, 0.2);
+  box-shadow: 0 0 12px rgba(255, 200, 0, 0.25);
 }
 
-/* Tabellen */
+/* Tabellen auf Mobilgeräten */
 .table-container {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-top: 8px;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
+  font-size: 0.88rem;
 }
 
 th, td {
-  padding: 8px 10px;
+  padding: 8px 6px;
   border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
 th {
   color: var(--fal-yellow);
+  font-size: 0.8rem;
+  text-transform: uppercase;
 }
 
-/* Match Cards */
+/* Match Cards Mobil */
 .match-card {
   background: var(--fal-blue-primary);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 12px;
   margin-bottom: 10px;
   display: flex;
   flex-direction: column;
+  gap: 8px;
+  border: 1px solid rgba(255,255,255,0.05);
 }
 
 .court-badge {
-  font-size: 0.75rem;
-  padding: 2px 6px;
+  font-size: 0.7rem;
+  padding: 3px 7px;
   border-radius: 4px;
   font-weight: bold;
 }
@@ -231,4 +281,5 @@ th {
 .empty-state {
   opacity: 0.6;
   font-style: italic;
+  font-size: 0.9rem;
 }
