@@ -398,7 +398,14 @@ function handleLiveDraftUI() {
   }
 
   modal.style.display = 'flex';
+
+  // Rendert die HTML-Struktur (Buttons, Text, Canvas-Element)
   renderDraftStep();
+
+  // WICHTIG: Startet den Live-Loop für die Animation auf JEDEM Gerät!
+  if (draftState.spinning || draftState.lastDrawnClub) {
+    startWheelAnimationLoop();
+  }
 }
 
 function renderDraftStep() {
@@ -468,24 +475,30 @@ function startWheelAnimationLoop() {
       const elapsed = now - draftState.startTime;
       const progress = Math.min(elapsed / draftState.duration, 1);
       
+      // Sanftes Abbremsen (Cubic Ease-Out)
       const easeOut = 1 - Math.pow(1 - progress, 3);
       currentAngle = easeOut * draftState.targetAngle;
 
+      // Das Rad auf jedem Bildschirm neu zeichnen
+      drawWheelCanvas(currentAngle);
+
+      // Solange die 4 Sekunden nicht um sind, Bild für Bild weitermachen
       if (progress < 1) {
         animFrameId = requestAnimationFrame(update);
       } else {
-        currentAngle = draftState.targetAngle;
+        // Am Ende exakt auf dem Zielwinkel stehen bleiben
+        drawWheelCanvas(draftState.targetAngle);
       }
-    } else if (draftState.lastDrawnClub) {
-      currentAngle = draftState.targetAngle;
+    } else {
+      // Zustand im Stillstand
+      currentAngle = draftState.targetAngle || 0;
+      drawWheelCanvas(currentAngle);
     }
-
-    drawWheelCanvas(currentAngle);
   }
 
-  update();
+  // Animation anstoßen
+  animFrameId = requestAnimationFrame(update);
 }
-
 function drawWheelCanvas(angleOffset) {
   const canvas = document.getElementById('wheel-canvas');
   if (!canvas) return;
