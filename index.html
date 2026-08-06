@@ -77,15 +77,53 @@
   </header>
 
   <nav id="app-nav" style="display: none;">
-    <button class="tab-btn active" id="btn-teams" onclick="showTab('teams')">👥 Teams</button>
+    <button class="tab-btn active" id="btn-dashboard" onclick="showTab('dashboard')">🏠 Startseite & Tipps</button>
+    <button class="tab-btn" id="btn-teams" onclick="showTab('teams')">👥 Teams</button>
     <button class="tab-btn" id="btn-groups" onclick="showTab('groups')">📊 Gruppen</button>
     <button class="tab-btn" id="btn-matches" onclick="showTab('matches')">⚔️ Spiele</button>
     <button class="tab-btn" id="btn-admin" onclick="showTab('admin')" style="display: none;">⚙️ Admin</button>
   </nav>
 
   <main id="app-main" style="display: none;">
+
+    <!-- TAB: DASHBOARD / STARTSEITE -->
+    <section id="tab-dashboard" class="tab-content active">
+      <!-- KREATIV-STATISTIKEN / DASHBOARD -->
+      <div class="admin-card" style="margin-bottom: 20px;">
+        <h2 style="color:var(--fal-yellow, #f1c40f); margin-top:0;">📊 Turnier-Analytics & KI-Prognose</h2>
+        <div id="stats-dashboard-container">
+          <!-- Wird dynamisch per JS gefüllt -->
+        </div>
+      </div>
+
+      <!-- TIPP-WETTBEWERB -->
+      <div class="admin-card" style="margin-bottom: 20px;">
+        <h2 style="color:var(--fal-yellow, #f1c40f); margin-top:0;">🎯 Wettbasis: Wer holt den Pokal?</h2>
+        <div id="betting-container">
+          <!-- Wird dynamisch per JS gefüllt -->
+        </div>
+      </div>
+
+      <!-- REGELN -->
+      <div class="admin-card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <h2 style="color:var(--fal-yellow, #f1c40f); margin:0;">📜 Reglement & Turnierregeln</h2>
+          <button id="btn-edit-rules" class="btn-secondary" style="display:none;" onclick="toggleRulesEdit()">✏️ Regeln bearbeiten</button>
+        </div>
+        
+        <div id="rules-display-area" style="white-space: pre-line; line-height: 1.6; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+          <!-- Dynamischer Regeltext -->
+        </div>
+
+        <div id="rules-edit-area" style="display:none; margin-top:10px;">
+          <textarea id="rules-textarea" rows="8" style="width:100%; padding:10px; border-radius:6px; background:#1e1e1e; color:#fff; border:1px solid #444; font-family:sans-serif;"></textarea>
+          <button class="btn-primary" style="margin-top:8px;" onclick="saveRules()">💾 Regeln speichern</button>
+        </div>
+      </div>
+    </section>
+
     <!-- TEAMS TAB -->
-    <section id="tab-teams" class="tab-content active">
+    <section id="tab-teams" class="tab-content">
       <h2>Angemeldete Teams</h2>
       <div id="teams-container" class="grid-container"></div>
     </section>
