@@ -1,987 +1,634 @@
 // ==========================================
-// 0. GLOBAL VERFÜGBAR MACHEN (WINDOW EXPORTS)
+// 1. GLOBALE ZUSTÄNDE & KONSTANTEN
 // ==========================================
-window.showExistingPlayers = showExistingPlayers;
-window.showNewPlayerInput = showNewPlayerInput;
-window.resetRoleSelection = resetRoleSelection;
-window.enterAsSpectator = enterAsSpectator;
-window.switchUser = switchUser;
-window.selectMyPlayer = selectMyPlayer;
-window.registerNewPlayer = registerNewPlayer;
-window.confirmAdminPassword = confirmAdminPassword;
-window.showTab = showTab;
-window.addPlayer = addPlayer;
-window.removePlayer = removePlayer;
-window.toggleRef = toggleRef;
-window.setPlayerPassword = setPlayerPassword;
-window.removePlayerPassword = removePlayerPassword;
-window.drawGroups = drawGroups;
-window.drawKOPhase = drawKOPhase;
-window.drawSemifinals = drawSemifinals;
-window.drawFinals = drawFinals;
-window.resetTournament = resetTournament;
-window.updateTeamName = updateTeamName;
-window.updateMatchScore = updateMatchScore;
-window.addClub = addClub;
-window.removeClub = removeClub;
-window.resetClubsToDefault = resetClubsToDefault;
-window.startInteractiveDraft = startInteractiveDraft;
-window.spinWheel = spinWheel;
-window.nextDraftStep = nextDraftStep;
-window.finishDraft = finishDraft;
-window.placeBet = placeBet;
-window.toggleRulesEdit = toggleRulesEdit;
-window.saveRules = saveRules;
-
-// ==========================================
-// 1. FIREBASE KONFIGURATION & INIT
-// ==========================================
-const firebaseConfig = {
-  apiKey: "AIzaSyBh0yOA1ckPp3TFBJ-Yz932k9A2R1pkTSc",
-  authDomain: "fal-fifa-turnier.firebaseapp.com",
-  databaseURL: "https://fal-fifa-turnier-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "fal-fifa-turnier",
-  storageBucket: "fal-fifa-turnier.firebasestorage.app",
-  messagingSenderId: "1095058810971",
-  appId: "1:1095058810971:web:2023d72275ed8c22e2b77e"
-};
-
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
-const db = firebase.database();
-
-const ADMIN_PASSWORD = "1234";
+const DEFAULT_RULES = "1. Fairplay geht vor!\n2. Spielzeit: 2x 6 Minuten.\n3. Bei Gleichstand in der KO-Phase gibt es Verlängerung / Elfmeterschießen.\n4. Ergebnisse werden direkt nach Spielende eingetragen.";
 
 const DEFAULT_CLUBS = [
-  "Real Madrid", "FC Bayern", "Manchester City", "Arsenal", 
-  "FC Barcelona", "PSG", "Inter Mailand", "Bayer Leverkusen",
-  "FC Liverpool", "Juventus", "Atletico Madrid", "Borussia Dortmund"
+  "FC Bayern München", "Real Madrid", "Manchester City", "FC Barcelona", 
+  "Paris Saint-Germain", "Liverpool FC", "Arsenal FC", "Inter Mailand", 
+  "Bayer 04 Leverkusen", "Borussia Dortmund", "Juventus Turin", "Atletico Madrid"
 ];
 
-const DEFAULT_RULES = 
-  "1. Halbzeitlänge: 6 Minuten pro Halbzeit.\n" +
-  "2. Steuerung: Tactical Defending ist Pflicht.\n" +
-  "3. Unentschieden in der KO-Phase: Verlängerung & Elfmeterschießen.\n" +
-  "4. Fairplay: Kein Zeitspiel in den letzten 10 Spielminuten!\n" +
-  "5. Schiedsrichterentscheidungen sind unanfechtbar.";
-
-const WHEEL_COLORS = [
-  "#e74c3c", "#3498db", "#2ecc71", "#f1c40f", 
-  "#9b59b6", "#e67e22", "#1abc9c", "#34495e"
+let players = JSON.parse(localStorage.getItem('fal_players')) || [
+  { name: 'Tim', isRef: true, password: '' },
+  { name: 'Max', isRef: false, password: '' },
+  { name: 'Lukas', isRef: false, password: '' },
+  { name: 'Julian', isRef: false, password: '' }
 ];
 
-// ==========================================
-// 2. GLOBALE ZUSTÄNDE & VARIABLEN
-// ==========================================
-let players = [];
-let availableClubs = [...DEFAULT_CLUBS];
-let teams = [];
-let groups = [];
-let groupMatches = [];
-let koMatches = [];
-let bets = {}; // { playerName: teamId }
-let rulesText = DEFAULT_RULES;
-let myPlayerName = localStorage.getItem('fifa_my_player') || null;
-let pendingAdminLogin = false;
+let availableClubs = JSON.parse(localStorage.getItem('fal_clubs')) || [...DEFAULT_CLUBS];
+let teams = JSON.parse(localStorage.getItem('fal_teams')) || [];
+let groups = JSON.parse(localStorage.getItem('fal_groups')) || [];
+let groupMatches = JSON.parse(localStorage.getItem('fal_group_matches')) || [];
+let koMatches = JSON.parse(localStorage.getItem('fal_ko_matches')) || [];
+let bets = JSON.parse(localStorage.getItem('fal_bets')) || {};
+let rulesText = localStorage.getItem('fal_rules') || DEFAULT_RULES;
 
-// Interaktive Auslosung State
+let myPlayerName = localStorage.getItem('fal_my_player') || '';
+let currentRole = localStorage.getItem('fal_role') || 'spectator'; // 'admin', 'ref', 'player', 'spectator'
+
+// Live-Draft / Glücksrad Zustand
 let draftState = {
   active: false,
-  pairs: [],
-  currentIndex: 0,
+  step: 0, // 0: Start, 1: P1, 2: P2, 3: Club
+  currentP1: null,
+  currentP2: null,
+  currentClub: null,
+  remainingPlayers: [],
   remainingClubs: [],
-  spinning: false,
-  startTime: null,
-  targetAngle: 0,
-  duration: 4000,
-  lastDrawnClub: null
+  isSpinning: false,
+  angle: 0
 };
 
-let animFrameId = null;
-let lastRenderedIndex = -1;
-let lastRenderedSpinning = false;
+// ==========================================
+// 2. PERSISTENZ & FIREBASE SYNC
+// ==========================================
+function saveData() {
+  localStorage.setItem('fal_players', JSON.stringify(players));
+  localStorage.setItem('fal_clubs', JSON.stringify(availableClubs));
+  localStorage.setItem('fal_teams', JSON.stringify(teams));
+  localStorage.setItem('fal_groups', JSON.stringify(groups));
+  localStorage.setItem('fal_group_matches', JSON.stringify(groupMatches));
+  localStorage.setItem('fal_ko_matches', JSON.stringify(koMatches));
+  localStorage.setItem('fal_bets', JSON.stringify(bets));
+  localStorage.setItem('fal_rules', rulesText);
+
+  // Sync mit Firebase Realtime Database (falls eingebunden)
+  if (typeof firebase !== 'undefined' && firebase.database) {
+    try {
+      firebase.database().ref('tournament').set({
+        teams, groups, groupMatches, koMatches, bets, rulesText, players, availableClubs
+      });
+    } catch (e) {
+      console.warn("Firebase Sync fehlgeschlagen oder nicht konfiguriert:", e);
+    }
+  }
+}
+
+function initFirebaseListener() {
+  if (typeof firebase !== 'undefined' && firebase.database) {
+    try {
+      firebase.database().ref('tournament').on('value', snapshot => {
+        const data = snapshot.val();
+        if (data) {
+          if (data.teams) teams = data.teams;
+          if (data.groups) groups = data.groups;
+          if (data.groupMatches) groupMatches = data.groupMatches;
+          if (data.koMatches) koMatches = data.koMatches;
+          if (data.bets) bets = data.bets;
+          if (data.rulesText) rulesText = data.rulesText;
+          if (data.players) players = data.players;
+          if (data.availableClubs) availableClubs = data.availableClubs;
+          renderAll();
+        }
+      });
+    } catch (e) {
+      console.warn("Firebase Listener Fehler:", e);
+    }
+  }
+}
 
 // ==========================================
-// HELFER & AUTH PRÜFUNGEN
+// 3. AUTH & RECHTE-MANAGEMENT
 // ==========================================
-function getPlayerObj(name) {
-  if (!name) return null;
-  return players.find(p => p.name.toLowerCase() === name.trim().toLowerCase());
+function loginAsPlayer(name) {
+  const p = players.find(x => x.name === name);
+  if (!p) return;
+
+  if (p.password) {
+    const enteredPw = prompt(`Bitte Passwort für ${name} eingeben:`);
+    if (enteredPw !== p.password) {
+      alert('Falsches Passwort!');
+      return;
+    }
+  }
+
+  myPlayerName = name;
+  localStorage.setItem('fal_my_player', myPlayerName);
+
+  if (name === 'Tim') {
+    currentRole = 'admin';
+  } else if (p.isRef) {
+    currentRole = 'ref';
+  } else {
+    currentRole = 'player';
+  }
+  localStorage.setItem('fal_role', currentRole);
+
+  updateUserStatusDisplay();
+  renderAll();
 }
 
-function isAdmin() {
-  return myPlayerName && myPlayerName.trim().toLowerCase() === 'tim';
+function logout() {
+  myPlayerName = '';
+  currentRole = 'spectator';
+  localStorage.removeItem('fal_my_player');
+  localStorage.setItem('fal_role', 'spectator');
+  updateUserStatusDisplay();
+  renderAll();
 }
 
-function isRef() {
-  const p = getPlayerObj(myPlayerName);
-  return p && p.isRef;
-}
-
-function canManageMatches() {
-  return isAdmin() || isRef();
-}
+function isAdmin() { return currentRole === 'admin' || myPlayerName === 'Tim'; }
+function isRef() { return currentRole === 'ref'; }
+function canManageMatches() { return isAdmin() || isRef(); }
 
 function getMyTeam() {
   if (!myPlayerName) return null;
-  return teams.find(t => t.p1 === myPlayerName || t.p2 === myPlayerName);
+  return teams.find(t => t.p1 === myPlayerName || t.p2 === myPlayerName) || null;
 }
 
-// ==========================================
-// DOM CONTENT LOADED EVENT LISTENERS
-// ==========================================
-document.addEventListener('DOMContentLoaded', () => {
-  const btnShowNew = document.getElementById('btn-show-new');
-  if (btnShowNew) btnShowNew.addEventListener('click', showNewPlayerInput);
-
-  const btnShowExisting = document.getElementById('btn-show-existing');
-  if (btnShowExisting) btnShowExisting.addEventListener('click', showExistingPlayers);
-
-  const btnSpectator = document.getElementById('btn-enter-spectator');
-  if (btnSpectator) btnSpectator.addEventListener('click', enterAsSpectator);
-
-  const btnRegister = document.getElementById('btn-register-new');
-  if (btnRegister) btnRegister.addEventListener('click', registerNewPlayer);
-
-  const btnConfirmAdmin = document.getElementById('btn-confirm-admin');
-  if (btnConfirmAdmin) btnConfirmAdmin.addEventListener('click', confirmAdminPassword);
-
-  const btnSwitchUser = document.getElementById('btn-switch-user');
-  if (btnSwitchUser) btnSwitchUser.addEventListener('click', switchUser);
-
-  document.querySelectorAll('.btn-reset-role').forEach(btn => {
-    btn.addEventListener('click', resetRoleSelection);
-  });
+function updateUserStatusDisplay() {
+  const statusEl = document.getElementById('user-status');
+  if (!statusEl) return;
 
   if (myPlayerName) {
-    enterAsSpectator();
-  }
-});
+    let roleText = 'Spieler';
+    if (isAdmin()) roleText = '👑 Admin (Tim)';
+    else if (isRef()) roleText = '🟨 Schiedsrichter';
 
-// ==========================================
-// 3. ROLLEN & LOGIN LOGIK
-// ==========================================
-function enterAsSpectator() {
-  document.getElementById('role-selection-modal').style.display = 'none';
-  document.getElementById('app-header').style.display = 'flex';
-  document.getElementById('app-nav').style.display = 'flex';
-  document.getElementById('app-main').style.display = 'block';
-  
-  const userBadge = document.getElementById('user-badge');
-  if (userBadge) {
-    let roleTag = '';
-    if (isAdmin()) roleTag = '⭐ (Admin)';
-    else if (isRef()) roleTag = '🟨 (Ref)';
-
-    userBadge.innerHTML = myPlayerName 
-      ? `Angemeldet als: <strong>${myPlayerName}</strong> ${roleTag}`
-      : 'Modus: <strong>Zuschauer</strong>';
-  }
-
-  const adminBtn = document.getElementById('btn-admin');
-  if (adminBtn) adminBtn.style.display = isAdmin() ? 'inline-block' : 'none';
-
-  showTab('dashboard');
-}
-
-function switchUser() {
-  localStorage.removeItem('fifa_my_player');
-  myPlayerName = null;
-  
-  document.getElementById('app-header').style.display = 'none';
-  document.getElementById('app-nav').style.display = 'none';
-  document.getElementById('app-main').style.display = 'none';
-  
-  resetRoleSelection();
-  document.getElementById('role-selection-modal').style.display = 'flex';
-}
-
-function showNewPlayerInput() {
-  document.getElementById('role-options').style.display = 'none';
-  document.getElementById('new-player-select').style.display = 'block';
-  document.getElementById('existing-players-select').style.display = 'none';
-  document.getElementById('admin-password-select').style.display = 'none';
-}
-
-function showExistingPlayers() {
-  const container = document.getElementById('existing-players-list');
-  if (!container) return;
-
-  if (players.length === 0) {
-    container.innerHTML = '<p class="empty-state">Noch keine Spieler registriert.</p>';
+    statusEl.innerHTML = `Eingeloggt als: <strong>${myPlayerName}</strong> (${roleText}) <button class="btn-secondary" style="padding:2px 6px; margin-left:8px;" onclick="logout()">Abmelden</button>`;
   } else {
-    container.innerHTML = players.map(p => `
-      <button class="btn-secondary" style="margin: 4px; width: auto;" onclick="selectMyPlayer('${p.name}')">
-        ${p.name} ${p.isRef ? '🟨' : ''} ${p.password ? '🔒' : ''}
-      </button>
-    `).join('');
+    statusEl.innerHTML = `Modus: <strong>Zuschauer</strong> (Logge dich unten in der Spielerliste ein)`;
   }
-  
-  document.getElementById('role-options').style.display = 'none';
-  document.getElementById('new-player-select').style.display = 'none';
-  document.getElementById('existing-players-select').style.display = 'block';
-  document.getElementById('admin-password-select').style.display = 'none';
 }
 
-function resetRoleSelection() {
-  pendingAdminLogin = false;
-  document.getElementById('role-options').style.display = 'block';
-  document.getElementById('new-player-select').style.display = 'none';
-  document.getElementById('existing-players-select').style.display = 'none';
-  document.getElementById('admin-password-select').style.display = 'none';
-}
-
-function selectMyPlayer(name) {
-  const pObj = getPlayerObj(name);
-
-  if (name.trim().toLowerCase() === 'tim') {
-    promptPassword('admin', name, '🔒 Admin-Login für Tim: Bitte Passwort eingeben');
-    return;
-  }
-
-  if (pObj && pObj.password) {
-    promptPassword('player', name, `🔒 Passwort für ${name} eingeben:`);
-    return;
-  }
-  
-  myPlayerName = name;
-  localStorage.setItem('fifa_my_player', name);
-  enterAsSpectator();
-}
-
-function registerNewPlayer() {
-  const input = document.getElementById('self-player-name');
-  const name = input ? input.value.trim() : '';
+// ==========================================
+// 4. SPIELER & CLUB VERWALTUNG (ADMIN)
+// ==========================================
+function addPlayer() {
+  const input = document.getElementById('new-player-name');
+  if (!input) return;
+  const name = input.value.trim();
   if (!name) return alert('Bitte Namen eingeben!');
-
-  if (name.toLowerCase() === 'tim') {
-    promptPassword('admin', name, '🔒 Admin-Login für Tim: Bitte Passwort eingeben');
-    return;
+  if (players.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+    return alert('Spieler existiert bereits!');
   }
 
-  if (getPlayerObj(name)) return alert('Dieser Name existiert bereits!');
-
-  players.push({ name: name, isRef: false, password: null });
-  myPlayerName = name;
-  localStorage.setItem('fifa_my_player', name);
+  players.push({ name: name, isRef: false, password: '' });
+  input.value = '';
   saveData();
-  enterAsSpectator();
+  renderAll();
 }
 
-function promptPassword(type, name, textPrompt) {
-  pendingAdminLogin = { type, name };
-  document.getElementById('role-options').style.display = 'none';
-  document.getElementById('new-player-select').style.display = 'none';
-  document.getElementById('existing-players-select').style.display = 'none';
-  document.getElementById('admin-password-select').style.display = 'block';
-  
-  const textEl = document.getElementById('password-prompt-text');
-  if (textEl) textEl.innerText = textPrompt;
-  
-  const pwdInput = document.getElementById('admin-password-input');
-  if (pwdInput) pwdInput.value = '';
-}
-
-function confirmAdminPassword() {
-  const pwdInput = document.getElementById('admin-password-input');
-  const pwd = pwdInput ? pwdInput.value.trim() : '';
-
-  if (!pendingAdminLogin) return;
-
-  if (pendingAdminLogin.type === 'admin') {
-    if (pwd === ADMIN_PASSWORD) {
-      if (!getPlayerObj(pendingAdminLogin.name)) {
-        players.push({ name: pendingAdminLogin.name, isRef: false, password: null });
-        saveData();
-      }
-      myPlayerName = pendingAdminLogin.name;
-      localStorage.setItem('fifa_my_player', myPlayerName);
-      pendingAdminLogin = false;
-      enterAsSpectator();
-    } else {
-      alert('Falsches Admin-Passwort!');
-    }
-  } else if (pendingAdminLogin.type === 'player') {
-    const pObj = getPlayerObj(pendingAdminLogin.name);
-    if (pObj && pObj.password === pwd) {
-      myPlayerName = pendingAdminLogin.name;
-      localStorage.setItem('fifa_my_player', myPlayerName);
-      pendingAdminLogin = false;
-      enterAsSpectator();
-    } else {
-      alert('Falsches Passwort!');
-    }
+function removePlayer(idx) {
+  if (confirm(`Spieler "${players[idx].name}" wirklich löschen?`)) {
+    players.splice(idx, 1);
+    saveData();
+    renderAll();
   }
 }
 
-function showTab(tabName) {
-  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-
-  const btn = document.getElementById(`btn-${tabName}`);
-  const tab = document.getElementById(`tab-${tabName}`);
-  if (btn) btn.classList.add('active');
-  if (tab) tab.classList.add('active');
-}
-
-// ==========================================
-// 4. ECHTZEIT-SYNCHRONISATION VIA FIREBASE
-// ==========================================
-db.ref('tournament').on('value', (snapshot) => {
-  const data = snapshot.val() || {};
-  let rawPlayers = data.players || [];
-  
-  players = rawPlayers.map(p => typeof p === 'string' ? { name: p, isRef: false, password: null } : p);
-  availableClubs = data.availableClubs || [...DEFAULT_CLUBS];
-  teams = data.teams || [];
-  groups = data.groups || [];
-  groupMatches = data.groupMatches || [];
-  koMatches = data.koMatches || [];
-  bets = data.bets || {};
-  rulesText = data.rulesText || DEFAULT_RULES;
-  draftState = data.draftState || { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, startTime: null, targetAngle: 0, duration: 4000, lastDrawnClub: null };
-
+function toggleRef(idx) {
+  players[idx].isRef = !players[idx].isRef;
+  saveData();
   renderAll();
-  handleLiveDraftUI();
-});
-
-function saveData() {
-  db.ref('tournament').set({ players, availableClubs, teams, groups, groupMatches, koMatches, bets, rulesText, draftState });
 }
 
-// ==========================================
-// 5. PROFI-CLUBS VERWALTUNG
-// ==========================================
+function setPlayerPassword(idx) {
+  const pw = prompt(`Neues Passwort für ${players[idx].name} eingeben:`);
+  if (pw !== null) {
+    players[idx].password = pw.trim();
+    saveData();
+    renderAll();
+  }
+}
+
+function removePlayerPassword(idx) {
+  players[idx].password = '';
+  saveData();
+  renderAll();
+}
+
 function addClub() {
   const input = document.getElementById('new-club-name');
-  const name = input ? input.value.trim() : '';
+  if (!input) return;
+  const name = input.value.trim();
   if (!name) return;
-  if (availableClubs.includes(name)) return alert('Club bereits in der Liste!');
+  if (availableClubs.includes(name)) return alert('Club existiert bereits!');
 
   availableClubs.push(name);
   input.value = '';
   saveData();
+  renderAll();
 }
 
-function removeClub(index) {
-  if (!isAdmin()) return;
-  availableClubs.splice(index, 1);
+function removeClub(idx) {
+  availableClubs.splice(idx, 1);
   saveData();
+  renderAll();
 }
 
 function resetClubsToDefault() {
-  if (!isAdmin()) return;
-  if (confirm('Verfügbare Clubs auf Standard-Topteams zurücksetzen?')) {
+  if (confirm('Clubs auf Standard zurücksetzen?')) {
     availableClubs = [...DEFAULT_CLUBS];
     saveData();
+    renderAll();
   }
 }
 
 // ==========================================
-// 6. LIVE INTERAKTIVE AUSLOSUNG SHOW & GLÜCKSRAD
+// 5. LIVE-DRAFT & GLÜCKSRAD (CANVAS FIX)
 // ==========================================
 function startInteractiveDraft() {
-  if (!isAdmin()) return;
-  if (players.length < 2 || players.length % 2 !== 0) {
-    return alert(`Du benötigst eine gerade Anzahl an Spielern (aktuell: ${players.length}).`);
-  }
-  if (availableClubs.length < (players.length / 2)) {
-    return alert(`Du hast zu wenige Profi-Clubs in der Liste! Mindestens ${players.length / 2} benötigt.`);
+  if (players.length < 2) return alert('Es müssen mindestens 2 Spieler eingetragen sein!');
+  if (players.length % 2 !== 0) {
+    if (!confirm('Achtung: Ungerade Anzahl an Spielern! Ein Spieler bleibt übrig. Trotzdem starten?')) return;
   }
 
-  if (confirm('Soll die Auslosungs-Show jetzt LIVE gestartet werden?')) {
-    const shuffledPlayers = [...players.map(p => p.name)].sort(() => Math.random() - 0.5);
-    const shuffledClubs = [...availableClubs].sort(() => Math.random() - 0.5);
+  draftState.remainingPlayers = players.map(p => p.name);
+  draftState.remainingClubs = [...availableClubs];
+  draftState.step = 1;
+  draftState.active = true;
+  draftState.currentP1 = null;
+  draftState.currentP2 = null;
+  draftState.currentClub = null;
 
-    let pairs = [];
-    let idCounter = 1;
-    for (let i = 0; i < shuffledPlayers.length; i += 2) {
-      pairs.push({
-        id: idCounter,
-        name: `Team ${idCounter}`,
-        p1: shuffledPlayers[i],
-        p2: shuffledPlayers[i + 1],
-        club: null
-      });
-      idCounter++;
-    }
+  teams = [];
+  groups = [];
+  groupMatches = [];
+  koMatches = [];
+  saveData();
 
-    teams = [];
-    groups = [];
-    groupMatches = [];
-    koMatches = [];
-
-    draftState = {
-      active: true,
-      pairs: pairs,
-      currentIndex: 0,
-      remainingClubs: shuffledClubs,
-      spinning: false,
-      startTime: null,
-      targetAngle: 0,
-      duration: 4000,
-      lastDrawnClub: null
-    };
-
-    saveData();
-  }
+  openDraftModal();
 }
 
-function handleLiveDraftUI() {
-  const modal = document.getElementById('draft-modal');
-  if (!modal) return;
-
-  if (!draftState || !draftState.active) {
-    modal.style.display = 'none';
-    if (animFrameId) cancelAnimationFrame(animFrameId);
-    lastRenderedIndex = -1;
-    lastRenderedSpinning = false;
-    return;
+function openDraftModal() {
+  let modal = document.getElementById('draft-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'draft-modal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
   }
 
   modal.style.display = 'flex';
-
-  const needsReRender = (draftState.currentIndex !== lastRenderedIndex) || 
-                        (draftState.spinning !== lastRenderedSpinning) ||
-                        (!document.getElementById('wheel-canvas'));
-
-  if (needsReRender) {
-    lastRenderedIndex = draftState.currentIndex;
-    lastRenderedSpinning = draftState.spinning;
-    renderDraftStep();
-  }
-
-  startWheelAnimationLoop();
+  renderDraftContent();
 }
 
-function renderDraftStep() {
-  const stage = document.getElementById('draft-stage');
-  if (!stage) return;
+function closeDraftModal() {
+  const modal = document.getElementById('draft-modal');
+  if (modal) modal.style.display = 'none';
+  draftState.active = false;
+  renderAll();
+}
 
-  if (draftState.currentIndex >= draftState.pairs.length) {
-    stage.innerHTML = `
-      <h3 style="color:#4CAF50;">🎉 Alle Teams wurden gelost! 🎉</h3>
-      <p>Die Teams und zugelosten Fußballmannschaften stehen fest!</p>
-      ${isAdmin() ? `<button class="btn-primary role-btn" onclick="finishDraft()">Fertigstellen & Teams speichern</button>` : '<p style="color:var(--fal-yellow, #f1c40f);">Warte auf Admin-Bestätigung...</p>'}
-    `;
-    return;
+function renderDraftContent() {
+  const modal = document.getElementById('draft-modal');
+  if (!modal) return;
+
+  let itemsToDraw = [];
+  let title = '';
+
+  if (draftState.step === 1) {
+    title = '🎯 Spieler 1 drehen';
+    itemsToDraw = draftState.remainingPlayers;
+  } else if (draftState.step === 2) {
+    title = `🎯 Partner für ${draftState.currentP1} drehen`;
+    itemsToDraw = draftState.remainingPlayers;
+  } else if (draftState.step === 3) {
+    title = `⚽ Profi-Club für Team (${draftState.currentP1} & ${draftState.currentP2}) drehen`;
+    itemsToDraw = draftState.remainingClubs.length > 0 ? draftState.remainingClubs : ['FC Random'];
   }
 
-  const currentPair = draftState.pairs[draftState.currentIndex];
+  modal.innerHTML = `
+    <div class="modal-content" style="background:#1e293b; color:#fff; padding:20px; border-radius:12px; max-width:500px; width:90%; text-align:center; position:relative;">
+      <h2>🎰 LIVE-Auslosungs-Show</h2>
+      <h3>${title}</h3>
 
-  stage.innerHTML = `
-    <p style="font-size:0.9em; opacity:0.8;">Team ${draftState.currentIndex + 1} von ${draftState.pairs.length}</p>
-    
-    <div style="background:rgba(0,0,0,0.3); padding:15px; border-radius:10px; margin: 15px 0;">
-      <h3 style="margin:0 0 10px 0; color:var(--fal-yellow, #f1c40f);">👥 Spieler-Duo:</h3>
-      <h2 style="margin:0; font-size:1.4em;">${currentPair.p1} & ${currentPair.p2}</h2>
+      <div style="position:relative; width:280px; height:280px; margin: 15px auto;">
+        <div style="position:absolute; top:-10px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:12px solid transparent; border-right:12px solid transparent; border-top:20px solid #f1c40f; z-index:10;"></div>
+        <canvas id="wheel-canvas" width="280" height="280"></canvas>
+      </div>
+
+      <button id="btn-spin" class="btn-primary" style="font-size:1.2em; padding:10px 24px;" onclick="spinWheel()">🔥 RAD DREHEN!</button>
+
+      <div style="margin-top:20px; text-align:left; background:rgba(0,0,0,0.3); padding:10px; border-radius:8px;">
+        <h4>Bisher geloste Teams (${teams.length}):</h4>
+        <ul style="max-height:120px; overflow-y:auto; margin:0; padding-left:20px;">
+          ${teams.map(t => `<li><strong>${t.name}:</strong> ${t.p1} & ${t.p2} (${t.club})</li>`).join('')}
+        </ul>
+      </div>
+
+      <button class="btn-secondary" style="margin-top:15px;" onclick="closeDraftModal()">Draft beenden / Schließen</button>
     </div>
-
-    <div class="wheel-container" style="position:relative; display:inline-block;">
-      <div class="wheel-pointer" style="position:absolute; top:-10px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:12px solid transparent; border-right:12px solid transparent; border-top:20px solid #e74c3c; z-index:10;"></div>
-      <canvas id="wheel-canvas" width="260" height="260"></canvas>
-    </div>
-
-    <div id="spin-result" style="height: 35px; font-weight: bold; font-size: 1.2em; color: var(--fal-yellow, #f1c40f); margin-top:5px;">
-      ${draftState.lastDrawnClub ? `⚽ Gewählter Club: <u>${draftState.lastDrawnClub}</u>` : ''}
-    </div>
-
-    ${isAdmin() ? `
-      ${!draftState.spinning && !draftState.lastDrawnClub ? `
-        <button class="btn-primary role-btn" id="btn-spin-wheel" style="margin-top:10px;" onclick="spinWheel()">
-          🎰 Rad drehen
-        </button>
-      ` : ''}
-
-      ${!draftState.spinning && draftState.lastDrawnClub ? `
-        <button class="btn-primary role-btn" style="margin-top:15px;" onclick="nextDraftStep()">
-          ${draftState.currentIndex + 1 < draftState.pairs.length ? 'Weiter zum nächsten Team ➡️' : 'Auslosung abschließen 🎉'}
-        </button>
-      ` : ''}
-    ` : `
-      <p style="font-size:0.9em; opacity:0.8; margin-top:10px;">
-        ${draftState.spinning ? '🎰 Das Rad dreht sich live...' : (draftState.lastDrawnClub ? 'Warte auf nächstes Team...' : 'Der Admin dreht gleich am Rad!')}
-      </p>
-    `}
   `;
 
-  startWheelAnimationLoop();
+  setTimeout(() => drawWheel(itemsToDraw), 50);
 }
 
-function startWheelAnimationLoop() {
-  if (animFrameId) cancelAnimationFrame(animFrameId);
-
-  function update() {
-    if (!draftState || !draftState.active) return;
-
-    let currentAngle = 0;
-
-    if (draftState.spinning && draftState.startTime) {
-      const now = Date.now();
-      const elapsed = now - draftState.startTime;
-      const progress = Math.min(elapsed / draftState.duration, 1);
-      
-      const easeOut = 1 - Math.pow(1 - progress, 3);
-      currentAngle = easeOut * draftState.targetAngle;
-
-      drawWheelCanvas(currentAngle);
-
-      if (progress < 1) {
-        animFrameId = requestAnimationFrame(update);
-      } else {
-        drawWheelCanvas(draftState.targetAngle);
-      }
-    } else {
-      currentAngle = draftState.targetAngle || 0;
-      drawWheelCanvas(currentAngle);
-    }
-  }
-
-  animFrameId = requestAnimationFrame(update);
-}
-
-function drawWheelCanvas(angleInDegrees) {
+// GLÜCKSRAD RENDER-FUNKTION (MIT GEWÄHRLEISTETER TEXT-ANZEIGE)
+function drawWheel(items) {
   const canvas = document.getElementById('wheel-canvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  
   const width = canvas.width;
   const height = canvas.height;
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const radius = width / 2 - 10;
-
-  const clubs = draftState.remainingClubs || availableClubs;
-  const numSegments = clubs.length;
-  if (numSegments === 0) return;
-
-  const arcSize = (2 * Math.PI) / numSegments;
+  const radius = width / 2;
 
   ctx.clearRect(0, 0, width, height);
 
+  if (!items || items.length === 0) {
+    ctx.fillStyle = '#fff';
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Keine Elemente', radius, radius);
+    return;
+  }
+
+  const numSegments = items.length;
+  const arcSize = (2 * Math.PI) / numSegments;
+  const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f1c40f', '#9b59b6', '#e67e22', '#1abc9c', '#34495e'];
+
   ctx.save();
-  ctx.translate(centerX, centerY);
-  ctx.rotate((angleInDegrees - 90) * Math.PI / 180);
+  ctx.translate(radius, radius);
+  ctx.rotate(draftState.angle);
 
   for (let i = 0; i < numSegments; i++) {
     const angle = i * arcSize;
     ctx.beginPath();
-    ctx.fillStyle = WHEEL_COLORS[i % WHEEL_COLORS.length];
+    ctx.fillStyle = colors[i % colors.length];
     ctx.moveTo(0, 0);
-    ctx.arc(0, 0, radius, angle, angle + arcSize);
+    ctx.arc(0, 0, radius - 5, angle, angle + arcSize);
     ctx.lineTo(0, 0);
     ctx.fill();
     ctx.stroke();
 
+    // TEXT RENDER LOGIK
     ctx.save();
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 11px sans-serif";
-    ctx.textAlign = "right";
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'right';
     ctx.rotate(angle + arcSize / 2);
-    ctx.fillText(clubs[i].substring(0, 14), radius - 12, 4);
+    
+    let text = items[i];
+    if (text.length > 16) text = text.substring(0, 14) + '..';
+    ctx.fillText(text, radius - 15, 4);
     ctx.restore();
   }
 
   ctx.restore();
-
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, 18, 0, 2 * Math.PI);
-  ctx.fillStyle = "#ffffff";
-  ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "#333333";
-  ctx.stroke();
 }
 
 function spinWheel() {
-  if (!isAdmin() || draftState.spinning) return;
+  if (draftState.isSpinning) return;
 
-  const clubs = draftState.remainingClubs;
-  if (!clubs || clubs.length === 0) return;
+  let items = [];
+  if (draftState.step === 1 || draftState.step === 2) items = draftState.remainingPlayers;
+  else if (draftState.step === 3) items = draftState.remainingClubs.length > 0 ? draftState.remainingClubs : ['FC Random'];
 
-  const targetIndex = Math.floor(Math.random() * clubs.length);
-  const winningClub = clubs[targetIndex];
+  if (items.length === 0) return;
 
-  const segmentAngle = 360 / clubs.length;
-  const fullRounds = (5 + Math.floor(Math.random() * 4)) * 360;
+  draftState.isSpinning = true;
+  const btn = document.getElementById('btn-spin');
+  if (btn) btn.disabled = true;
+
+  const selectedIndex = Math.floor(Math.random() * items.length);
+  const numSegments = items.length;
+  const arcSize = (2 * Math.PI) / numSegments;
+
+  // Berechne Zielwinkel, sodass das gewählte Segment oben bei der Nadel landet (270 Grad / 1.5 Pi)
+  const targetSegmentCenter = (selectedIndex * arcSize) + (arcSize / 2);
+  const targetRotation = (1.5 * Math.PI) - targetSegmentCenter;
+  const extraRounds = (Math.floor(Math.random() * 3) + 4) * (2 * Math.PI);
   
-  const targetSegmentCenter = 360 - (targetIndex * segmentAngle + segmentAngle / 2);
-  const targetAngle = fullRounds + targetSegmentCenter;
+  const totalRotationNeeded = extraRounds + (targetRotation - (draftState.angle % (2 * Math.PI)));
+  const startAngle = draftState.angle;
+  const duration = 3500;
+  const startTime = performance.now();
 
-  draftState.spinning = true;
-  draftState.startTime = Date.now();
-  draftState.targetAngle = targetAngle;
-  draftState.duration = 4000;
-  draftState.lastDrawnClub = null;
-  saveData();
+  function animateWheel(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Ease-Out Cubic Effekt für realistisches Abbremsen
+    const easeOut = 1 - Math.pow(1 - progress, 3);
+    draftState.angle = startAngle + (totalRotationNeeded * easeOut);
 
-  setTimeout(() => {
-    if (isAdmin() && draftState.spinning) {
-      draftState.spinning = false;
-      draftState.lastDrawnClub = winningClub;
-      draftState.pairs[draftState.currentIndex].club = winningClub;
-      saveData();
-    }
-  }, 4100);
-}
+    drawWheel(items);
 
-function nextDraftStep() {
-  if (!isAdmin()) return;
-
-  if (draftState.lastDrawnClub) {
-    const idx = draftState.remainingClubs.indexOf(draftState.lastDrawnClub);
-    if (idx !== -1) {
-      draftState.remainingClubs.splice(idx, 1);
+    if (progress < 1) {
+      requestAnimationFrame(animateWheel);
+    } else {
+      draftState.isSpinning = false;
+      const wonItem = items[selectedIndex];
+      handleDraftResult(wonItem);
     }
   }
 
-  draftState.currentIndex++;
-  draftState.lastDrawnClub = null;
-  draftState.targetAngle = 0;
-  draftState.startTime = null;
-  draftState.spinning = false;
-  saveData();
+  requestAnimationFrame(animateWheel);
 }
 
-function finishDraft() {
-  if (!isAdmin()) return;
-  teams = [...draftState.pairs];
-  draftState.active = false;
-  saveData();
-  showTab('teams');
-}
+function handleDraftResult(wonItem) {
+  if (draftState.step === 1) {
+    draftState.currentP1 = wonItem;
+    draftState.remainingPlayers = draftState.remainingPlayers.filter(p => p !== wonItem);
+    draftState.step = 2;
+  } else if (draftState.step === 2) {
+    draftState.currentP2 = wonItem;
+    draftState.remainingPlayers = draftState.remainingPlayers.filter(p => p !== wonItem);
+    draftState.step = 3;
+  } else if (draftState.step === 3) {
+    draftState.currentClub = wonItem;
+    if (draftState.remainingClubs.includes(wonItem)) {
+      draftState.remainingClubs = draftState.remainingClubs.filter(c => c !== wonItem);
+    }
 
-// ==========================================
-// 7. SPIELER & ADMIN AKTIONEN
-// ==========================================
-function addPlayer() {
-  const input = document.getElementById('new-player-name');
-  const name = input ? input.value.trim() : '';
-  if (!name) return;
-  if (getPlayerObj(name)) return alert('Spieler existiert bereits!');
+    // Team Speichern
+    const newTeamId = teams.length + 1;
+    teams.push({
+      id: newTeamId,
+      name: `Team ${newTeamId}`,
+      p1: draftState.currentP1,
+      p2: draftState.currentP2,
+      club: draftState.currentClub
+    });
 
-  players.push({ name: name, isRef: false, password: null });
-  input.value = '';
-  saveData();
-}
-
-function removePlayer(index) {
-  if (!isAdmin()) return;
-  players.splice(index, 1);
-  saveData();
-}
-
-function toggleRef(index) {
-  if (!isAdmin()) return;
-  players[index].isRef = !players[index].isRef;
-  saveData();
-}
-
-function setPlayerPassword(index) {
-  if (!isAdmin()) return;
-  const pwd = prompt(`Neues Passwort für ${players[index].name} eingeben:`);
-  if (pwd !== null) {
-    if (pwd.trim() === '') return alert('Passwort darf nicht leer sein.');
-    players[index].password = pwd.trim();
     saveData();
-  }
-}
 
-function removePlayerPassword(index) {
-  if (!isAdmin()) return;
-  if (confirm(`Passwort von ${players[index].name} wirklich löschen?`)) {
-    players[index].password = null;
-    saveData();
+    // Reset für nächstes Team
+    draftState.currentP1 = null;
+    draftState.currentP2 = null;
+    draftState.currentClub = null;
+
+    if (draftState.remainingPlayers.length >= 2) {
+      draftState.step = 1;
+    } else {
+      alert('🎉 Alle Teams wurden erfolgreich ausgelost!');
+      closeDraftModal();
+      return;
+    }
   }
+
+  renderDraftContent();
 }
 
 // ==========================================
-// 8. GRUPPEN & KO-PHASE LOGIK
+// 6. GRUPPEN- & MATCH-GENERIERUNG (KORRIGIERT)
 // ==========================================
 function drawGroups() {
-  if (!isAdmin()) return;
-  if (teams.length < 4) return alert('Du benötigst mindestens 4 Teams für Gruppen!');
+  if (teams.length < 2) return alert('Es müssen mindestens 2 Teams existieren!');
 
-  let choice = prompt(
-    `Du hast aktuell ${teams.length} Teams.\n\n` +
-    `Wähle den Turniermodus:\n` +
-    `1 = 2 Gruppen (Top 2 je Gruppe direkt ins HALBFINALE)\n` +
-    `2 = 4 Gruppen (Top 2 je Gruppe ins VIERTELFINALE)\n\n` +
-    `Eingabe (1 oder 2):`, 
-    teams.length <= 8 ? "1" : "2"
-  );
+  const numGroups = teams.length >= 8 ? 4 : 2;
+  const groupLetters = ['Gruppe A', 'Gruppe B', 'Gruppe C', 'Gruppe D'].slice(0, numGroups);
 
-  if (!choice) return;
+  // Teams mischen
+  const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
 
-  let groupLetters = [];
-  if (choice.trim() === "1") {
-    groupLetters = ['Gruppe A', 'Gruppe B'];
-  } else if (choice.trim() === "2") {
-    groupLetters = ['Gruppe A', 'Gruppe B', 'Gruppe C', 'Gruppe D'];
-  } else {
-    return alert('Ungültige Auswahl! Bitte 1 oder 2 eingeben.');
-  }
+  groups = groupLetters.map(letter => ({ letter: letter, teams: [] }));
 
-  if (confirm(`Gruppen neu auslosen (${groupLetters.length} Gruppen) & Spielplan erstellen?`)) {
-    const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
-    groups = groupLetters.map(letter => ({ letter, teams: [] }));
-    
-    shuffledTeams.forEach((team, index) => {
-      groups[index % groups.length].teams.push(team.id);
-    });
-
-    let rawGroupMatches = [];
-    groups.forEach(group => {
-      const gTeams = group.teams;
-      for (let i = 0; i < gTeams.length; i++) {
-        for (let j = i + 1; j < gTeams.length; j++) {
-          rawGroupMatches.push({
-            group: group.letter,
-            t1Id: gTeams[i],
-            t2Id: gTeams[j],
-            score1: null,
-            score2: null,
-            played: false
-          });
-        }
-      }
-    });
-
-    let matchesByGroup = {};
-    groupLetters.forEach(l => { matchesByGroup[l] = rawGroupMatches.filter(m => m.group === l); });
-
-    let interleavedMatches = [];
-    let maxLen = Math.max(...Object.values(matchesByGroup).map(arr => arr.length));
-    
-    for (let i = 0; i < maxLen; i++) {
-      groupLetters.forEach(l => {
-        if (matchesByGroup[l][i]) {
-          interleavedMatches.push(matchesByGroup[l][i]);
-        }
-      });
-    }
-
-    groupMatches = [];
-    let matchId = 1;
-    let slotCounter = 1;
-
-    for (let i = 0; i < interleavedMatches.length; i += 2) {
-      let m1 = interleavedMatches[i];
-      let m2 = interleavedMatches[i + 1];
-
-      m1.id = matchId++;
-      m1.court = 'Hauptplatz';
-      m1.slot = slotCounter;
-      groupMatches.push(m1);
-
-      if (m2) {
-        if (m2.t1Id === m1.t1Id || m2.t1Id === m1.t2Id || m2.t2Id === m1.t1Id || m2.t2Id === m1.t2Id) {
-          let swapIdx = interleavedMatches.findIndex((candidate, cIdx) => 
-            cIdx > i + 1 && 
-            candidate.t1Id !== m1.t1Id && candidate.t1Id !== m1.t2Id &&
-            candidate.t2Id !== m1.t1Id && candidate.t2Id !== m1.t2Id
-          );
-
-          if (swapIdx !== -1) {
-            let temp = interleavedMatches[i + 1];
-            interleavedMatches[i + 1] = interleavedMatches[swapIdx];
-            interleavedMatches[swapIdx] = temp;
-            m2 = interleavedMatches[i + 1];
-          }
-        }
-
-        m2.id = matchId++;
-        m2.court = 'Nebenplatz';
-        m2.slot = slotCounter;
-        groupMatches.push(m2);
-      }
-
-      slotCounter++;
-    }
-
-    koMatches = [];
-    saveData();
-    showTab('groups');
-  }
-}
-
-function drawKOPhase() {
-  if (!isAdmin()) return;
-  if (groups.length === 2) {
-    return alert('Du spielst im 2-Gruppen-Modus! Klicke direkt auf "Halbfinale auslosen".');
-  }
-
-  const standings = calculateGroupStandings();
-  const qualified1st = [];
-  const qualified2nd = [];
-
-  standings.forEach(g => {
-    if (g.rankings.length >= 1) qualified1st.push({ ...g.rankings[0], group: g.letter });
-    if (g.rankings.length >= 2) qualified2nd.push({ ...g.rankings[1], group: g.letter });
+  shuffledTeams.forEach((team, idx) => {
+    groups[idx % numGroups].teams.push(team.id);
   });
 
-  if (qualified1st.length < 4 || qualified2nd.length < 4) {
-    return alert('Es müssen in allen 4 Gruppen die Gruppenspiele beendet sein!');
-  }
+  generateGroupMatches();
+  saveData();
+  renderAll();
+}
 
-  if (confirm('Viertelfinale Über-Kreuz auslosen (keine Duelle aus gleicher Gruppe)?')) {
-    let available2nd = [...qualified2nd];
-    let paired2nd = [];
+function generateGroupMatches() {
+  groupMatches = [];
+  let matchIdCounter = 1;
 
-    for (let i = 0; i < qualified1st.length; i++) {
-      let first = qualified1st[i];
-      let possibleOpponents = available2nd.filter(sec => sec.group !== first.group);
-      
-      if (possibleOpponents.length === 0) {
-        possibleOpponents = available2nd;
+  groups.forEach(group => {
+    const tIds = group.teams;
+    const n = tIds.length;
+
+    // Jeder gegen Jeden innerhalb der Gruppe
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        groupMatches.push({
+          id: matchIdCounter++,
+          group: group.letter,
+          t1Id: tIds[i],
+          t2Id: tIds[j],
+          score1: null,
+          score2: null,
+          played: false,
+          court: 'Hauptplatz',
+          slot: 1
+        });
       }
-
-      let chosen = possibleOpponents[Math.floor(Math.random() * possibleOpponents.length)];
-      paired2nd.push(chosen);
-      available2nd = available2nd.filter(sec => sec.teamId !== chosen.teamId);
     }
+  });
 
-    koMatches = [];
-    let matchId = 101;
+  // Zeitfenster (Slots) & Plätze fair verteilen
+  assignCourtsAndSlots();
+}
 
-    for (let i = 0; i < 4; i++) {
-      let court = (i % 2 === 0) ? 'Hauptplatz' : 'Nebenplatz';
-      koMatches.push({
-        id: matchId++,
-        round: 'Viertelfinale',
-        court: court,
-        t1Id: qualified1st[i].teamId,
-        t2Id: paired2nd[i].teamId,
-        score1: null,
-        score2: null,
-        played: false
-      });
-    }
+function assignCourtsAndSlots() {
+  let currentSlot = 1;
+  let courtToggle = false;
 
-    saveData();
-    showTab('matches');
+  groupMatches.forEach((m, idx) => {
+    m.slot = Math.floor(idx / 2) + 1;
+    m.court = courtToggle ? 'Nebenplatz' : 'Hauptplatz';
+    courtToggle = !courtToggle;
+  });
+}
+
+// ==========================================
+// 7. KO-PHASE GENERIERUNG
+// ==========================================
+function drawKOPhase() {
+  if (groups.length === 0) return alert('Zuerst müssen die Gruppen ausgelost und gespielt werden!');
+
+  const standings = calculateGroupStandings();
+  koMatches = [];
+
+  if (groups.length === 4) {
+    // 4 Gruppen -> Viertelfinale (Über-Kreuz)
+    const gA = standings.find(g => g.letter === 'Gruppe A').rankings;
+    const gB = standings.find(g => g.letter === 'Gruppe B').rankings;
+    const gC = standings.find(g => g.letter === 'Gruppe C').rankings;
+    const gD = standings.find(g => g.letter === 'Gruppe D').rankings;
+
+    koMatches.push(
+      { id: 101, round: '⚔️ Viertelfinale 1', t1Id: gA[0].teamId, t2Id: gB[1].teamId, score1: null, score2: null, played: false, court: 'Hauptplatz' },
+      { id: 102, round: '⚔️ Viertelfinale 2', t1Id: gB[0].teamId, t2Id: gA[1].teamId, score1: null, score2: null, played: false, court: 'Nebenplatz' },
+      { id: 103, round: '⚔️ Viertelfinale 3', t1Id: gC[0].teamId, t2Id: gD[1].teamId, score1: null, score2: null, played: false, court: 'Hauptplatz' },
+      { id: 104, round: '⚔️ Viertelfinale 4', t1Id: gD[0].teamId, t2Id: gC[1].teamId, score1: null, score2: null, played: false, court: 'Nebenplatz' }
+    );
+  } else {
+    // 2 Gruppen -> Halbfinale direkt
+    const gA = standings.find(g => g.letter === 'Gruppe A').rankings;
+    const gB = standings.find(g => g.letter === 'Gruppe B').rankings;
+
+    koMatches.push(
+      { id: 201, round: '🔥 Halbfinale 1', t1Id: gA[0].teamId, t2Id: gB[1].teamId, score1: null, score2: null, played: false, court: 'Hauptplatz' },
+      { id: 202, round: '🔥 Halbfinale 2', t1Id: gB[0].teamId, t2Id: gA[1].teamId, score1: null, score2: null, played: false, court: 'Nebenplatz' }
+    );
   }
+
+  saveData();
+  renderAll();
 }
 
 function drawSemifinals() {
-  if (!isAdmin()) return;
-  const standings = calculateGroupStandings();
-
-  if (groups.length === 2) {
-    const groupA = standings.find(g => g.letter === 'Gruppe A');
-    const groupB = standings.find(g => g.letter === 'Gruppe B');
-
-    if (!groupA || !groupB || groupA.rankings.length < 2 || groupB.rankings.length < 2) {
-      return alert('Es müssen erst alle Gruppenspiele in Gruppe A und B beendet sein!');
-    }
-
-    if (confirm('Halbfinale Über-Kreuz anlegen? (A1 vs B2 & B1 vs A2)')) {
-      koMatches = [
-        {
-          id: 201, round: 'Halbfinale 1', court: 'Hauptplatz',
-          t1Id: groupA.rankings[0].teamId,
-          t2Id: groupB.rankings[1].teamId,
-          score1: null, score2: null, played: false
-        },
-        {
-          id: 202, round: 'Halbfinale 2', court: 'Nebenplatz',
-          t1Id: groupB.rankings[0].teamId,
-          t2Id: groupA.rankings[1].teamId,
-          score1: null, score2: null, played: false
-        }
-      ];
-
-      saveData();
-      showTab('matches');
-    }
-    return;
+  const qf = koMatches.filter(m => m.round.includes('Viertelfinale'));
+  if (qf.length < 4 || qf.some(m => !m.played)) {
+    return alert('Alle Viertelfinalspiele müssen zuerst gespielt sein!');
   }
 
-  const qfMatches = koMatches.filter(m => m.round === 'Viertelfinale');
-  const winners = [];
+  const w1 = qf[0].score1 > qf[0].score2 ? qf[0].t1Id : qf[0].t2Id;
+  const w2 = qf[1].score1 > qf[1].score2 ? qf[1].t1Id : qf[1].t2Id;
+  const w3 = qf[2].score1 > qf[2].score2 ? qf[2].t1Id : qf[2].t2Id;
+  const w4 = qf[3].score1 > qf[3].score2 ? qf[3].t1Id : qf[3].t2Id;
 
-  qfMatches.forEach(m => {
-    if (m.played) {
-      if (m.score1 > m.score2) winners.push(m.t1Id);
-      else if (m.score2 > m.score1) winners.push(m.t2Id);
-    }
-  });
+  koMatches = koMatches.filter(m => !m.round.includes('Halbfinale') && !m.round.includes('Finale') && !m.round.includes('Platz 3'));
 
-  if (winners.length < 4) return alert('Es müssen erst alle 4 Viertelfinal-Spiele beendet sein!');
+  koMatches.push(
+    { id: 201, round: '🔥 Halbfinale 1', t1Id: w1, t2Id: w4, score1: null, score2: null, played: false, court: 'Hauptplatz' },
+    { id: 202, round: '🔥 Halbfinale 2', t1Id: w2, t2Id: w3, score1: null, score2: null, played: false, court: 'Nebenplatz' }
+  );
 
-  if (confirm('Halbfinale jetzt zufällig aus den 4 Siegern auslosen?')) {
-    const shuffledWinners = [...winners].sort(() => Math.random() - 0.5);
-    
-    koMatches.push({
-      id: 201, round: 'Halbfinale 1', court: 'Hauptplatz',
-      t1Id: shuffledWinners[0], t2Id: shuffledWinners[1],
-      score1: null, score2: null, played: false
-    });
-
-    koMatches.push({
-      id: 202, round: 'Halbfinale 2', court: 'Nebenplatz',
-      t1Id: shuffledWinners[2], t2Id: shuffledWinners[3],
-      score1: null, score2: null, played: false
-    });
-
-    saveData();
-    showTab('matches');
-  }
+  saveData();
+  renderAll();
 }
 
 function drawFinals() {
-  if (!isAdmin()) return;
-  const hf1 = koMatches.find(m => m.round === 'Halbfinale 1');
-  const hf2 = koMatches.find(m => m.round === 'Halbfinale 2');
-
-  if (!hf1 || !hf2 || !hf1.played || !hf2.played) return alert('Beide Halbfinal-Spiele müssen erst beendet sein!');
-
-  const hf1Winner = hf1.score1 > hf1.score2 ? hf1.t1Id : hf1.t2Id;
-  const hf1Loser  = hf1.score1 > hf1.score2 ? hf1.t2Id : hf1.t1Id;
-  const hf2Winner = hf2.score1 > hf2.score2 ? hf2.t1Id : hf2.t2Id;
-  const hf2Loser  = hf2.score1 > hf2.score2 ? hf2.t2Id : hf2.t1Id;
-
-  if (confirm('Finale & Spiel um Platz 3 jetzt erstellen?')) {
-    koMatches.push({
-      id: 301, round: '🥉 Spiel um Platz 3', court: 'Nebenplatz',
-      t1Id: hf1Loser, t2Id: hf2Loser, score1: null, score2: null, played: false
-    });
-
-    koMatches.push({
-      id: 302, round: '🏆 FINALE', court: 'Hauptplatz',
-      t1Id: hf1Winner, t2Id: hf2Winner, score1: null, score2: null, played: false
-    });
-
-    saveData();
-    showTab('matches');
+  const sf = koMatches.filter(m => m.round.includes('Halbfinale'));
+  if (sf.length < 2 || sf.some(m => !m.played)) {
+    return alert('Alle Halbfinalspiele müssen erst absolviert werden!');
   }
+
+  const w1 = sf[0].score1 > sf[0].score2 ? sf[0].t1Id : sf[0].t2Id;
+  const l1 = sf[0].score1 > sf[0].score2 ? sf[0].t2Id : sf[0].t1Id;
+
+  const w2 = sf[1].score1 > sf[1].score2 ? sf[1].t1Id : sf[1].t2Id;
+  const l2 = sf[1].score1 > sf[1].score2 ? sf[1].t2Id : sf[1].t1Id;
+
+  koMatches = koMatches.filter(m => !m.round.includes('Finale') && !m.round.includes('Platz 3'));
+
+  koMatches.push(
+    { id: 301, round: '🥉 Spiel um Platz 3', t1Id: l1, t2Id: l2, score1: null, score2: null, played: false, court: 'Nebenplatz' },
+    { id: 302, round: '🏆 FINALE', t1Id: w1, t2Id: w2, score1: null, score2: null, played: false, court: 'Hauptplatz' }
+  );
+
+  saveData();
+  renderAll();
 }
 
 function resetTournament() {
-  if (!isAdmin()) return;
-  if (confirm('Turnier wirklich zurücksetzen? Alle Teams und Ergebnisse werden gelöscht!')) {
-    players = [];
+  if (confirm('🚨 MÖCHTEST DU DAS TURNIER WIRKLICH VOLLSTÄNDIG ZURÜCKSETZEN? Alle Ergebnisse, Teams und Gruppen werden gelöscht!')) {
     teams = [];
     groups = [];
     groupMatches = [];
     koMatches = [];
     bets = {};
-    rulesText = DEFAULT_RULES;
-    draftState = { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, startTime: null, targetAngle: 0, duration: 4000, lastDrawnClub: null };
     saveData();
+    renderAll();
   }
 }
 
 // ==========================================
-// 9. MATCH & TEAM UPDATES
+// 8. ERGEBNIS- & TEAM-UPDATES
 // ==========================================
 function updateTeamName(teamId, newName) {
   const team = teams.find(t => t.id === teamId);
   if (!team) return;
 
   const isMyTeam = (myPlayerName && (team.p1 === myPlayerName || team.p2 === myPlayerName));
-  
+
   if (canManageMatches() || isMyTeam) {
     team.name = newName.trim() || `Team ${team.id}`;
     saveData();
@@ -1028,10 +675,11 @@ function updateMatchScore(matchId, isKO, score1Val, score2Val) {
   }
 
   saveData();
+  renderAll();
 }
 
 // ==========================================
-// 10. TIPP-SPIEL & REGELN LOGIK
+// 9. TIPP-SPIEL & REGELN LOGIK
 // ==========================================
 function placeBet(teamId) {
   if (!myPlayerName) {
@@ -1040,6 +688,7 @@ function placeBet(teamId) {
 
   bets[myPlayerName] = parseInt(teamId, 10);
   saveData();
+  renderAll();
 }
 
 function toggleRulesEdit() {
@@ -1064,12 +713,14 @@ function saveRules() {
   rulesText = textarea.value;
   saveData();
   toggleRulesEdit();
+  renderAll();
 }
 
 // ==========================================
-// 11. RENDER LOGIK & UI-STEUERUNG
+// 10. RENDER LOGIK & UI-STEUERUNG
 // ==========================================
 function renderAll() {
+  updateUserStatusDisplay();
   renderDashboard();
   renderTeams();
   renderGroups();
@@ -1096,7 +747,6 @@ function renderDashboard() {
     } else {
       const myCurrentBet = myPlayerName ? bets[myPlayerName] : null;
       
-      // Berechne Votes pro Team
       const totalVotes = Object.keys(bets).length;
       const votesPerTeam = {};
       teams.forEach(t => votesPerTeam[t.id] = 0);
@@ -1137,7 +787,6 @@ function renderDashboard() {
       return;
     }
 
-    // Statistiken berechnen aus allen gefahrenen Spielen
     let allMatches = [...groupMatches, ...koMatches].filter(m => m.played);
     
     let stats = {};
@@ -1164,7 +813,6 @@ function renderDashboard() {
     let topScorer = [...teamList].sort((a,b) => b.gf - a.gf)[0];
     let bestDefense = [...teamList].sort((a,b) => a.ga - b.ga)[0];
 
-    // KI-Siegchancen Berechnen (Kombination aus Torverhältnis & Siegquote)
     let totalWinScore = 0;
     teamList.forEach(t => {
       let winRate = t.played > 0 ? (t.won / t.played) : 0.5;
@@ -1181,7 +829,6 @@ function renderDashboard() {
 
     statsContainer.innerHTML = `
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:15px;">
-        
         <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; text-align:center; border-top:3px solid #f1c40f;">
           <div style="font-size:0.8em; opacity:0.8;">🔥 Torfabrik (Meiste Tore)</div>
           <div style="font-weight:bold; font-size:1.1em; margin-top:4px; color:#f1c40f;">
@@ -1202,7 +849,6 @@ function renderDashboard() {
             ${bestChanceTeam ? `${bestChanceTeam.name} (${bestChanceTeam.winChance}%)` : '-'}
           </div>
         </div>
-
       </div>
     `;
   }
@@ -1423,6 +1069,7 @@ function renderMatchCard(match, isKO) {
   `;
 }
 
+// SPIELER-VERWALTUNG IM ADMIN-PANEL (VOLLSTÄNDIG WIEDERHERGESTELLT)
 function renderAdminPanel() {
   const container = document.getElementById('admin-container');
   if (!container) return;
@@ -1441,21 +1088,24 @@ function renderAdminPanel() {
       </div>
       <ul style="list-style: none; padding: 0; margin: 0;">
         ${players.map((p, idx) => `
-          <li style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+          <li style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
             <span>
               <strong>${p.name}</strong> 
-              ${p.isRef ? '🟨 (Schiedsrichter)' : ''} 
+              ${p.isRef ? '<span style="color:#f1c40f;">🟨 (Schiedsrichter)</span>' : ''} 
               ${p.password ? '🔒' : ''}
             </span>
-            <div style="display: flex; gap: 4px;">
-              <button class="btn-secondary" style="padding: 2px 6px; font-size: 0.8em;" onclick="toggleRef(${idx})">
+            <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+              <button class="btn-secondary" style="padding: 3px 8px; font-size: 0.8em;" onclick="loginAsPlayer('${p.name}')">
+                Einloggen
+              </button>
+              <button class="btn-secondary" style="padding: 3px 8px; font-size: 0.8em;" onclick="toggleRef(${idx})">
                 ${p.isRef ? 'Ref-Rechte entziehen' : 'Als Ref setzen'}
               </button>
-              <button class="btn-secondary" style="padding: 2px 6px; font-size: 0.8em;" onclick="setPlayerPassword(${idx})">
+              <button class="btn-secondary" style="padding: 3px 8px; font-size: 0.8em;" onclick="setPlayerPassword(${idx})">
                 PW ${p.password ? 'ändern' : 'setzen'}
               </button>
-              ${p.password ? `<button class="btn-secondary" style="padding: 2px 6px; font-size: 0.8em; color: #ff6b6b;" onclick="removePlayerPassword(${idx})">PW löschen</button>` : ''}
-              <button class="btn-secondary" style="padding: 2px 6px; font-size: 0.8em; color: #ff6b6b;" onclick="removePlayer(${idx})">❌</button>
+              ${p.password ? `<button class="btn-secondary" style="padding: 3px 8px; font-size: 0.8em; color: #ff6b6b;" onclick="removePlayerPassword(${idx})">PW löschen</button>` : ''}
+              <button class="btn-secondary" style="padding: 3px 8px; font-size: 0.8em; color: #ff6b6b;" onclick="removePlayer(${idx})">❌</button>
             </div>
           </li>
         `).join('')}
@@ -1492,3 +1142,11 @@ function renderAdminPanel() {
     </div>
   `;
 }
+
+// ==========================================
+// 11. INITIALISIERUNG BEIM START
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+  initFirebaseListener();
+  renderAll();
+});
