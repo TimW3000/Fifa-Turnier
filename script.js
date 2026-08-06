@@ -209,7 +209,7 @@ function selectMyPlayer(name) {
   const pObj = getPlayerObj(name);
 
   if (name.trim().toLowerCase() === 'tim') {
-    promptPassword('admin', name, '🔒 Admin-Login für Tim: Bitte Passwort eingeben');
+    promptPassword('admin', name, '🔒 Zugang gesperrt!');
     return;
   }
 
