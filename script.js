@@ -1261,3 +1261,137 @@ function selectExistingPlayer(name) {
   loginAsPlayer(name);
   closeRoleModal();
 }
+// ==========================================
+// 6. TAB-NAVIGATION & VIEW-ROUTING
+// ==========================================
+function showTab(tabId) {
+  // Alle Tabs und Nav-Buttons deaktivieren
+  document.querySelectorAll('.tab-content').forEach(tab => {
+    tab.classList.remove('active');
+    tab.style.display = 'none';
+  });
+  
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+
+  // Ziel-Tab und Button aktivieren
+  const targetTab = document.getElementById(`tab-${tabId}`);
+  const targetBtn = document.getElementById(`btn-${tabId}`);
+
+  if (targetTab) {
+    targetTab.classList.add('active');
+    targetTab.style.display = 'block';
+  }
+  if (targetBtn) {
+    targetBtn.classList.add('active');
+  }
+
+  // Daten beim Tab-Wechsel frisch rendern
+  renderAll();
+}
+
+// ==========================================
+// 7. RENDER-STEUERUNG (ALLE VIEWS)
+// ==========================================
+function renderAll() {
+  updateUserStatusDisplay();
+  renderAdminNav();
+  renderRules();
+  renderTeams();
+  renderAdminPlayerList();
+  renderAdminClubList();
+  // Falls du hierfür schon Funktionen hast, werden sie aufgerufen:
+  if (typeof renderGroups === 'function') renderGroups();
+  if (typeof renderMatches === 'function') renderMatches();
+  if (typeof renderStats === 'function') renderStats();
+  if (typeof renderBets === 'function') renderBets();
+}
+
+// Zeigt den Admin-Tab nur an, wenn der User Admin-Rechte hat (z.B. Tim)
+function renderAdminNav() {
+  const adminBtn = document.getElementById('btn-admin');
+  if (adminBtn) {
+    adminBtn.style.display = isAdmin() ? 'inline-block' : 'none';
+  }
+}
+
+// Regeln anzeigen
+function renderRules() {
+  const displayArea = document.getElementById('rules-display-area');
+  const editBtn = document.getElementById('btn-edit-rules');
+  if (displayArea) displayArea.innerText = rulesText;
+  if (editBtn) editBtn.style.display = isAdmin() ? 'inline-block' : 'none';
+}
+
+function toggleRulesEdit() {
+  const displayArea = document.getElementById('rules-display-area');
+  const editArea = document.getElementById('rules-edit-area');
+  const textarea = document.getElementById('rules-textarea');
+
+  if (editArea.style.display === 'none') {
+    textarea.value = rulesText;
+    editArea.style.display = 'block';
+    displayArea.style.display = 'none';
+  } else {
+    editArea.style.display = 'none';
+    displayArea.style.display = 'block';
+  }
+}
+
+function saveRules() {
+  const textarea = document.getElementById('rules-textarea');
+  if (textarea) {
+    rulesText = textarea.value;
+    saveData();
+    renderRules();
+    toggleRulesEdit();
+  }
+}
+
+// Teams rendern
+function renderTeams() {
+  const container = document.getElementById('teams-container');
+  if (!container) return;
+
+  if (teams.length === 0) {
+    container.innerHTML = '<p style="opacity:0.7;">Noch keine Teams gelost. Starte die Auslosung im Admin-Bereich!</p>';
+    return;
+  }
+
+  container.innerHTML = teams.map(t => `
+    <div class="admin-card" style="margin-bottom:10px;">
+      <h3 style="margin:0 0 5px 0; color:var(--fal-yellow,#f1c40f);">${t.name}</h3>
+      <p style="margin:0;">👥 <strong>${t.p1} & ${t.p2}</strong></p>
+      <p style="margin:5px 0 0 0; opacity:0.8;">⚽ Club: ${t.club}</p>
+    </div>
+  `).join('');
+}
+
+// Admin-Listen (Spieler & Profi-Clubs)
+function renderAdminPlayerList() {
+  const container = document.getElementById('admin-player-list');
+  if (!container) return;
+
+  container.innerHTML = players.map((p, idx) => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #333;">
+      <span><strong>${p.name}</strong> ${p.isRef ? '🟨 (Schiri)' : ''} ${p.password ? '🔒' : ''}</span>
+      <div>
+        <button class="btn-secondary btn-sm" onclick="toggleRef(${idx})">${p.isRef ? 'Schiri entfernen' : 'Zu Schiri machen'}</button>
+        <button class="btn-secondary btn-sm" onclick="setPlayerPassword(${idx})">PW setzen</button>
+        <button class="btn-danger btn-sm" onclick="removePlayer(${idx})">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderAdminClubList() {
+  const container = document.getElementById('admin-club-list');
+  if (!container) return;
+
+  container.innerHTML = availableClubs.map((club, idx) => `
+    <span style="background:rgba(255,255,255,0.1); padding:4px 8px; border-radius:4px; font-size:0.9em; display:inline-flex; align-items:center; gap:6px;">
+      ${club} <button style="background:none; border:none; color:#ff4d4d; cursor:pointer;" onclick="removeClub(${idx})">✕</button>
+    </span>
+  `).join('');
+}
