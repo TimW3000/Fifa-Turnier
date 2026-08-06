@@ -27,6 +27,8 @@ window.startInteractiveDraft = startInteractiveDraft;
 window.spinWheel = spinWheel;
 window.nextDraftStep = nextDraftStep;
 window.finishDraft = finishDraft;
+window.saveRules = saveRules;
+window.submitTip = submitTip;
 
 // 1. Firebase Konfiguration
 const firebaseConfig = {
@@ -52,6 +54,8 @@ const DEFAULT_CLUBS = [
   "FC Liverpool", "Juventus", "Atletico Madrid", "Borussia Dortmund"
 ];
 
+const DEFAULT_RULES = "Noch keine Regeln festgelegt. Der Admin kann sie hier eintragen.";
+
 // 2. Zustand
 let players = [];
 let availableClubs = [...DEFAULT_CLUBS];
@@ -59,6 +63,8 @@ let teams = [];
 let groups = [];
 let groupMatches = [];
 let koMatches = [];
+let rules = DEFAULT_RULES;
+let tips = {};
 let myPlayerName = localStorage.getItem('fifa_my_player') || null;
 let pendingAdminLogin = false;
 
@@ -149,7 +155,7 @@ function enterAsSpectator() {
   const adminBtn = document.getElementById('btn-admin');
   if (adminBtn) adminBtn.style.display = isAdmin() ? 'inline-block' : 'none';
 
-  showTab('teams');
+  showTab('home');
 }
 
 function switchUser() {
@@ -303,6 +309,8 @@ db.ref('tournament').on('value', (snapshot) => {
   groups = data.groups || [];
   groupMatches = data.groupMatches || [];
   koMatches = data.koMatches || [];
+  rules = data.rules || DEFAULT_RULES;
+  tips = data.tips || {};
   draftState = data.draftState || { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, startTime: null, targetAngle: 0, duration: 4000, lastDrawnClub: null };
 
   renderAll();
@@ -310,7 +318,7 @@ db.ref('tournament').on('value', (snapshot) => {
 });
 
 function saveData() {
-  db.ref('tournament').set({ players, availableClubs, teams, groups, groupMatches, koMatches, draftState });
+  db.ref('tournament').set({ players, availableClubs, teams, groups, groupMatches, koMatches, rules, tips, draftState });
 }
 
 // 5. Profi-Clubs Verwaltung
@@ -370,6 +378,7 @@ function startInteractiveDraft() {
     groups = [];
     groupMatches = [];
     koMatches = [];
+    tips = {};
 
     draftState = {
       active: true,
@@ -890,6 +899,7 @@ function resetTournament() {
     groups = [];
     groupMatches = [];
     koMatches = [];
+    tips = {};
     draftState = { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, startTime: null, targetAngle: 0, duration: 4000, lastDrawnClub: null };
     saveData();
   }
@@ -952,10 +962,146 @@ function updateMatchScore(matchId, isKO, score1Val, score2Val) {
 
 // 10. Render Panel & UI
 function renderAll() {
+  renderHome();
   renderTeams();
   renderGroups();
   renderMatches();
   renderAdminPanel();
+}
+
+// 10a. HOME: Regeln, Tippspiel, Dashboard
+function renderHome() {
+  renderRules();
+  renderTipRound();
+  renderDashboard();
+}
+
+function renderRules() {
+  const container = document.getElementById('rules-content');
+  if (!container) return;
+
+  if (isAdmin()) {
+    const currentText = (rules === DEFAULT_RULES) ? '' : rules;
+    container.innerHTML = `
+      <textarea id="rules-textarea" rows="6" style="width:100%;" placeholder="Regeln hier eintragen...">${currentText}</textarea>
+      <button class="btn-primary btn-sm" style="margin-top:8px;" onclick="saveRules()">Regeln speichern</button>
+    `;
+  } else {
+    container.innerHTML = `<p class="rules-text">${rules}</p>`;
+  }
+}
+
+function saveRules() {
+  if (!isAdmin()) return;
+  const textarea = document.getElementById('rules-textarea');
+  if (!textarea) return;
+  rules = textarea.value.trim() || DEFAULT_RULES;
+  saveData();
+}
+
+function renderTipRound() {
+  const container = document.getElementById('tip-content');
+  if (!container) return;
+
+  if (teams.length === 0) {
+    container.innerHTML = '<p class="empty-state">Sobald die Teams gelost sind, kann getippt werden.</p>';
+    return;
+  }
+
+  const totalTips = Object.keys(tips).length;
+  const myTip = myPlayerName ? tips[myPlayerName] : null;
+
+  const rows = teams.map(t => {
+    const count = Object.values(tips).filter(id => id === t.id).length;
+    const pct = totalTips > 0 ? Math.round((count / totalTips) * 100) : 0;
+    const isMine = myTip === t.id;
+    const label = `${t.name}${t.club ? ' (' + t.club + ')' : ''}`;
+
+    return `
+      <div class="tip-row">
+        <button class="btn-secondary tip-btn ${isMine ? 'highlight-me' : ''}"
+                ${myPlayerName ? `onclick="submitTip(${t.id})"` : 'disabled'}>
+          <span>${isMine ? '✅ ' : ''}${label}</span>
+          <span style="color:var(--fal-yellow); font-weight:bold;">${pct}% (${count})</span>
+        </button>
+        <div class="tip-bar-track">
+          <div class="tip-bar-fill" style="width:${pct}%;"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    ${!myPlayerName ? '<p class="empty-state">Melde dich als Spieler an, um mitzutippen.</p>' : ''}
+    ${rows}
+    <p style="font-size:0.8em; opacity:0.7; margin-top:4px;">${totalTips} von ${players.length} Spielern haben getippt.</p>
+  `;
+}
+
+function submitTip(teamId) {
+  if (!myPlayerName) return;
+  tips[myPlayerName] = teamId;
+  saveData();
+}
+
+function calculateTeamStats() {
+  const stats = {};
+  teams.forEach(t => {
+    stats[t.id] = { team: t, goals: 0, wins: 0, played: 0 };
+  });
+
+  [...groupMatches, ...koMatches].filter(m => m.played).forEach(m => {
+    if (stats[m.t1Id]) {
+      stats[m.t1Id].goals += m.score1;
+      stats[m.t1Id].played++;
+      if (m.score1 > m.score2) stats[m.t1Id].wins++;
+    }
+    if (stats[m.t2Id]) {
+      stats[m.t2Id].goals += m.score2;
+      stats[m.t2Id].played++;
+      if (m.score2 > m.score1) stats[m.t2Id].wins++;
+    }
+  });
+
+  return Object.values(stats);
+}
+
+function renderDashboard() {
+  const container = document.getElementById('dashboard-content');
+  if (!container) return;
+
+  if (teams.length === 0) {
+    container.innerHTML = '<p class="empty-state">Sobald Teams und Spiele existieren, siehst du hier Live-Statistiken.</p>';
+    return;
+  }
+
+  const stats = calculateTeamStats();
+  const played = stats.filter(s => s.played > 0);
+
+  const topScorer = [...stats].sort((a, b) => b.goals - a.goals)[0];
+  const topWinner = played.length > 0
+    ? [...played].sort((a, b) => (b.wins / b.played) - (a.wins / a.played) || b.wins - a.wins)[0]
+    : null;
+
+  const tipCounts = teams.map(t => ({ team: t, count: Object.values(tips).filter(id => id === t.id).length }));
+  const favorite = [...tipCounts].sort((a, b) => b.count - a.count)[0];
+
+  container.innerHTML = `
+    <div class="grid-container">
+      <div class="admin-card stat-tile">
+        <p class="stat-label">⚽ Torjäger-Team</p>
+        <p class="stat-value">${topScorer && topScorer.goals > 0 ? `${topScorer.team.name} (${topScorer.goals} Tore)` : 'Noch keine Tore'}</p>
+      </div>
+      <div class="admin-card stat-tile">
+        <p class="stat-label">🔥 Beste Siegquote</p>
+        <p class="stat-value">${topWinner ? `${topWinner.team.name} (${topWinner.wins}/${topWinner.played} Siege)` : 'Noch keine Spiele'}</p>
+      </div>
+      <div class="admin-card stat-tile">
+        <p class="stat-label">🐐 Fan-Liebling</p>
+        <p class="stat-value">${favorite && favorite.count > 0 ? `${favorite.team.name} (${favorite.count} Tipps)` : 'Noch keine Tipps'}</p>
+      </div>
+    </div>
+  `;
 }
 
 function renderTeams() {
