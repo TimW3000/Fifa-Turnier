@@ -62,6 +62,7 @@ let pendingAdminLogin = false;
 // Interaktive Auslosungs-Variablen
 let draftPairs = [];
 let draftCurrentIndex = 0;
+let remainingClubsForDraft = []; // Pool für verbleibende Teams auf dem Rad
 
 function getPlayerObj(name) {
   if (!name) return null;
@@ -335,7 +336,9 @@ function startInteractiveDraft() {
 
   if (confirm('Soll die Auslosungs-Show jetzt gestartet werden?')) {
     const shuffledPlayers = [...players.map(p => p.name)].sort(() => Math.random() - 0.5);
-    const shuffledClubs = [...availableClubs].sort(() => Math.random() - 0.5);
+    
+    // Kopie der Clubs für die Auslosung erstellen
+    remainingClubsForDraft = [...availableClubs].sort(() => Math.random() - 0.5);
 
     draftPairs = [];
     let idCounter = 1;
@@ -345,7 +348,7 @@ function startInteractiveDraft() {
         name: `Team ${idCounter}`,
         p1: shuffledPlayers[i],
         p2: shuffledPlayers[i + 1],
-        club: shuffledClubs[idCounter - 1]
+        club: null // Wird live durchs Rad ermittelt
       });
       idCounter++;
     }
@@ -397,7 +400,7 @@ function renderDraftStep() {
     <div id="spin-result" style="height: 35px; font-weight: bold; font-size: 1.2em; color: var(--fal-yellow); margin-top:5px;"></div>
 
     <button class="btn-primary role-btn" id="btn-spin-wheel" style="margin-top:10px;" onclick="spinWheel()">
-      🎰 Rad drehen für Profi-Club!
+      🎰 Rad drehen (${remainingClubsForDraft.length} Teams übrig)!
     </button>
   `;
 
@@ -408,7 +411,7 @@ function drawWheelCanvas(angleOffset) {
   const canvas = document.getElementById('wheel-canvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  const numClubs = availableClubs.length;
+  const numClubs = remainingClubsForDraft.length;
   const sliceAngle = (2 * Math.PI) / numClubs;
 
   ctx.clearRect(0, 0, 260, 260);
@@ -435,7 +438,7 @@ function drawWheelCanvas(angleOffset) {
     ctx.textAlign = "right";
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 11px sans-serif";
-    ctx.fillText(availableClubs[i].substring(0, 12), 120, 4);
+    ctx.fillText(remainingClubsForDraft[i].substring(0, 12), 120, 4);
     ctx.restore();
   }
 }
@@ -444,14 +447,17 @@ function spinWheel() {
   const spinBtn = document.getElementById('btn-spin-wheel');
   if (spinBtn) spinBtn.disabled = true;
 
-  const currentPair = draftPairs[draftCurrentIndex];
-  const targetClub = currentPair.club;
-  const targetIndex = availableClubs.indexOf(targetClub);
+  // Zufällig ein Team aus den NOCH VERBLEIBENDEN Teams wählen
+  const targetIndex = Math.floor(Math.random() * remainingClubsForDraft.length);
+  const targetClub = remainingClubsForDraft[targetIndex];
 
-  const numClubs = availableClubs.length;
+  const currentPair = draftPairs[draftCurrentIndex];
+  currentPair.club = targetClub; // Dem Team zuweisen
+
+  const numClubs = remainingClubsForDraft.length;
   const sliceAngle = (2 * Math.PI) / numClubs;
 
-  // Berechne Zielwinkel so, dass die Nadel (oben at -90deg/270deg) auf das Segment zeigt
+  // Berechne Zielwinkel so, dass die Nadel (oben) auf das Segment zeigt
   const targetSegmentAngle = 2.5 * Math.PI - (targetIndex + 0.5) * sliceAngle;
   const totalRotation = (2 * Math.PI * 5) + targetSegmentAngle; // 5 volle Umdrehungen + Ziel
 
@@ -462,7 +468,6 @@ function spinWheel() {
     if (!start) start = timestamp;
     const progress = Math.min((timestamp - start) / duration, 1);
     
-    // Ease-out Formel für realistisches Abbremsen
     const easeOut = 1 - Math.pow(1 - progress, 3);
     const currentAngle = easeOut * totalRotation;
 
@@ -475,6 +480,9 @@ function spinWheel() {
       if (resultEl) {
         resultEl.innerHTML = `⚽ Gewählter Club: <u>${targetClub}</u>`;
       }
+
+      // Gezogenen Club aus dem aktiven Pool entfernen!
+      remainingClubsForDraft.splice(targetIndex, 1);
 
       setTimeout(() => {
         const stage = document.getElementById('draft-stage');
