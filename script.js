@@ -13,7 +13,6 @@ window.removePlayer = removePlayer;
 window.toggleRef = toggleRef;
 window.setPlayerPassword = setPlayerPassword;
 window.removePlayerPassword = removePlayerPassword;
-window.drawTeams = drawTeams;
 window.drawGroups = drawGroups;
 window.drawKOPhase = drawKOPhase;
 window.drawSemifinals = drawSemifinals;
@@ -21,6 +20,10 @@ window.drawFinals = drawFinals;
 window.resetTournament = resetTournament;
 window.updateTeamName = updateTeamName;
 window.updateMatchScore = updateMatchScore;
+window.addClub = addClub;
+window.removeClub = removeClub;
+window.resetClubsToDefault = resetClubsToDefault;
+window.startInteractiveDraft = startInteractiveDraft;
 
 // 1. Firebase Konfiguration
 const firebaseConfig = {
@@ -40,14 +43,25 @@ const db = firebase.database();
 
 const ADMIN_PASSWORD = "1234";
 
+const DEFAULT_CLUBS = [
+  "Real Madrid", "FC Bayern", "Manchester City", "Arsenal", 
+  "FC Barcelona", "PSG", "Inter Mailand", "Bayer Leverkusen",
+  "FC Liverpool", "Juventus", "Atletico Madrid", "Borussia Dortmund"
+];
+
 // 2. Zustand
 let players = [];
+let availableClubs = [...DEFAULT_CLUBS];
 let teams = [];
 let groups = [];
 let groupMatches = [];
 let koMatches = [];
 let myPlayerName = localStorage.getItem('fifa_my_player') || null;
 let pendingAdminLogin = false;
+
+// Interaktive Auslosungs-Variablen
+let draftPairs = [];
+let draftCurrentIndex = 0;
 
 function getPlayerObj(name) {
   if (!name) return null;
@@ -100,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// 3. Rollen-Auswahl & Authentifizierung
+// 3. Rollen & Auth
 function enterAsSpectator() {
   document.getElementById('role-selection-modal').style.display = 'none';
   document.getElementById('app-header').style.display = 'flex';
@@ -111,7 +125,7 @@ function enterAsSpectator() {
   if (userBadge) {
     let roleTag = '';
     if (isAdmin()) roleTag = '⭐ (Admin)';
-    else if (isRef()) roleTag = '🟨 (Ref / Schiedsrichter)';
+    else if (isRef()) roleTag = '🟨 (Ref)';
 
     userBadge.innerHTML = myPlayerName 
       ? `Angemeldet als: <strong>${myPlayerName}</strong> ${roleTag}`
@@ -195,7 +209,7 @@ function registerNewPlayer() {
   if (!name) return alert('Bitte Namen eingeben!');
 
   if (name.toLowerCase() === 'tim') {
-    promptPassword('admin', name, '🔒 Gesperrter Zugang: Bitte Passwort eingeben');
+    promptPassword('admin', name, '🔒 Admin-Login für Tim: Bitte Passwort eingeben');
     return;
   }
 
@@ -269,13 +283,8 @@ db.ref('tournament').on('value', (snapshot) => {
   const data = snapshot.val() || {};
   let rawPlayers = data.players || [];
   
-  players = rawPlayers.map(p => {
-    if (typeof p === 'string') {
-      return { name: p, isRef: false, password: null };
-    }
-    return p;
-  });
-
+  players = rawPlayers.map(p => typeof p === 'string' ? { name: p, isRef: false, password: null } : p);
+  availableClubs = data.availableClubs || [...DEFAULT_CLUBS];
   teams = data.teams || [];
   groups = data.groups || [];
   groupMatches = data.groupMatches || [];
@@ -285,10 +294,210 @@ db.ref('tournament').on('value', (snapshot) => {
 });
 
 function saveData() {
-  db.ref('tournament').set({ players, teams, groups, groupMatches, koMatches });
+  db.ref('tournament').set({ players, availableClubs, teams, groups, groupMatches, koMatches });
 }
 
-// 5. Admin Logik & Ref/PW-Verwaltung
+// 5. Profi-Clubs Verwaltung
+function addClub() {
+  const input = document.getElementById('new-club-name');
+  const name = input ? input.value.trim() : '';
+  if (!name) return;
+  if (availableClubs.includes(name)) return alert('Club bereits in der Liste!');
+
+  availableClubs.push(name);
+  input.value = '';
+  saveData();
+}
+
+function removeClub(index) {
+  if (!isAdmin()) return;
+  availableClubs.splice(index, 1);
+  saveData();
+}
+
+function resetClubsToDefault() {
+  if (!isAdmin()) return;
+  if (confirm('Verfügbare Clubs auf Standard-Topteams zurücksetzen?')) {
+    availableClubs = [...DEFAULT_CLUBS];
+    saveData();
+  }
+}
+
+// 6. INTERAKTIVE AUSLOSUNG & SPINNER WHEEL SHOW
+function startInteractiveDraft() {
+  if (!isAdmin()) return;
+  if (players.length < 2 || players.length % 2 !== 0) {
+    return alert(`Du benötigst eine gerade Anzahl an Spielern (aktuell: ${players.length}).`);
+  }
+  if (availableClubs.length < (players.length / 2)) {
+    return alert(`Du hast zu wenige Profi-Clubs in der Liste! Mindestens ${players.length / 2} benötigt.`);
+  }
+
+  if (confirm('Soll die Auslosungs-Show jetzt gestartet werden?')) {
+    const shuffledPlayers = [...players.map(p => p.name)].sort(() => Math.random() - 0.5);
+    const shuffledClubs = [...availableClubs].sort(() => Math.random() - 0.5);
+
+    draftPairs = [];
+    let idCounter = 1;
+    for (let i = 0; i < shuffledPlayers.length; i += 2) {
+      draftPairs.push({
+        id: idCounter,
+        name: `Team ${idCounter}`,
+        p1: shuffledPlayers[i],
+        p2: shuffledPlayers[i + 1],
+        club: shuffledClubs[idCounter - 1]
+      });
+      idCounter++;
+    }
+
+    draftCurrentIndex = 0;
+    teams = [];
+    groups = [];
+    groupMatches = [];
+    koMatches = [];
+
+    document.getElementById('draft-modal').style.display = 'flex';
+    renderDraftStep();
+  }
+}
+
+function renderDraftStep() {
+  const stage = document.getElementById('draft-stage');
+  if (!stage) return;
+
+  if (draftCurrentIndex >= draftPairs.length) {
+    // Auslosung beendet!
+    teams = [...draftPairs];
+    saveData();
+    stage.innerHTML = `
+      <h3 style="color:#4CAF50;">🎉 Alle Teams wurden gelost! 🎉</h3>
+      <p>Die Teams und zugelosten Fußballmannschaften stehen fest!</p>
+      <button class="btn-primary role-btn" onclick="document.getElementById('draft-modal').style.display='none'; showTab('teams');">
+        Fertigstellen & Teams anzeigen
+      </button>
+    `;
+    return;
+  }
+
+  const currentPair = draftPairs[draftCurrentIndex];
+
+  stage.innerHTML = `
+    <p style="font-size:0.9em; opacity:0.8;">Team ${draftCurrentIndex + 1} von ${draftPairs.length}</p>
+    
+    <div style="background:rgba(0,0,0,0.3); padding:15px; border-radius:10px; margin: 15px 0;">
+      <h3 style="margin:0 0 10px 0; color:var(--fal-yellow);">👥 Spieler-Duo:</h3>
+      <h2 style="margin:0; font-size:1.4em;">${currentPair.p1} & ${currentPair.p2}</h2>
+    </div>
+
+    <div class="wheel-container">
+      <div class="wheel-pointer"></div>
+      <canvas id="wheel-canvas" width="260" height="260"></canvas>
+    </div>
+
+    <div id="spin-result" style="height: 35px; font-weight: bold; font-size: 1.2em; color: var(--fal-yellow); margin-top:5px;"></div>
+
+    <button class="btn-primary role-btn" id="btn-spin-wheel" style="margin-top:10px;" onclick="spinWheel()">
+      🎰 Rad drehen für Profi-Club!
+    </button>
+  `;
+
+  drawWheelCanvas(0);
+}
+
+function drawWheelCanvas(angleOffset) {
+  const canvas = document.getElementById('wheel-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const numClubs = availableClubs.length;
+  const sliceAngle = (2 * Math.PI) / numClubs;
+
+  ctx.clearRect(0, 0, 260, 260);
+
+  const colors = ['#1e3e62', '#0b192c', '#132a4a', '#2a2a2a', '#10233d'];
+
+  for (let i = 0; i < numClubs; i++) {
+    const startAngle = angleOffset + i * sliceAngle;
+    const endAngle = startAngle + sliceAngle;
+
+    ctx.beginPath();
+    ctx.moveTo(130, 130);
+    ctx.arc(130, 130, 130, startAngle, endAngle);
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,200,0,0.3)';
+    ctx.stroke();
+
+    // Text auf Glücksrad zeichnen
+    ctx.save();
+    ctx.translate(130, 130);
+    ctx.rotate(startAngle + sliceAngle / 2);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText(availableClubs[i].substring(0, 12), 120, 4);
+    ctx.restore();
+  }
+}
+
+function spinWheel() {
+  const spinBtn = document.getElementById('btn-spin-wheel');
+  if (spinBtn) spinBtn.disabled = true;
+
+  const currentPair = draftPairs[draftCurrentIndex];
+  const targetClub = currentPair.club;
+  const targetIndex = availableClubs.indexOf(targetClub);
+
+  const numClubs = availableClubs.length;
+  const sliceAngle = (2 * Math.PI) / numClubs;
+
+  // Berechne Zielwinkel so, dass die Nadel (oben at -90deg/270deg) auf das Segment zeigt
+  const targetSegmentAngle = 2.5 * Math.PI - (targetIndex + 0.5) * sliceAngle;
+  const totalRotation = (2 * Math.PI * 5) + targetSegmentAngle; // 5 volle Umdrehungen + Ziel
+
+  let start = null;
+  const duration = 4000; // 4 Sekunden Animation
+
+  function animate(timestamp) {
+    if (!start) start = timestamp;
+    const progress = Math.min((timestamp - start) / duration, 1);
+    
+    // Ease-out Formel für realistisches Abbremsen
+    const easeOut = 1 - Math.pow(1 - progress, 3);
+    const currentAngle = easeOut * totalRotation;
+
+    drawWheelCanvas(currentAngle);
+
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      const resultEl = document.getElementById('spin-result');
+      if (resultEl) {
+        resultEl.innerHTML = `⚽ Gewählter Club: <u>${targetClub}</u>`;
+      }
+
+      setTimeout(() => {
+        const stage = document.getElementById('draft-stage');
+        if (stage) {
+          const nextBtn = document.createElement('button');
+          nextBtn.className = 'btn-primary role-btn';
+          nextBtn.style.marginTop = '15px';
+          nextBtn.innerText = draftCurrentIndex + 1 < draftPairs.length ? 'Weiter zum nächsten Team ➡️' : 'Auslosung abschließen 🎉';
+          nextBtn.onclick = () => {
+            draftCurrentIndex++;
+            renderDraftStep();
+          };
+          stage.appendChild(nextBtn);
+          if (spinBtn) spinBtn.style.display = 'none';
+        }
+      }, 500);
+    }
+  }
+
+  requestAnimationFrame(animate);
+}
+
+// 7. Standard Admin Handlungen
 function addPlayer() {
   const input = document.getElementById('new-player-name');
   const name = input ? input.value.trim() : '';
@@ -316,10 +525,7 @@ function setPlayerPassword(index) {
   if (!isAdmin()) return;
   const pwd = prompt(`Neues Passwort für ${players[index].name} eingeben:`);
   if (pwd !== null) {
-    if (pwd.trim() === '') {
-      alert('Passwort darf nicht leer sein.');
-      return;
-    }
+    if (pwd.trim() === '') return alert('Passwort darf nicht leer sein.');
     players[index].password = pwd.trim();
     saveData();
   }
@@ -333,36 +539,7 @@ function removePlayerPassword(index) {
   }
 }
 
-function drawTeams() {
-  if (!isAdmin()) return;
-  if (players.length < 2 || players.length % 2 !== 0) {
-    return alert(`Du benötigst eine gerade Anzahl an Spielern (aktuell: ${players.length}).`);
-  }
-
-  if (confirm('Möchtest du neue 2er-Teams auslosen?')) {
-    const playerNames = players.map(p => p.name);
-    const shuffled = [...playerNames].sort(() => Math.random() - 0.5);
-    teams = [];
-    let idCounter = 1;
-
-    for (let i = 0; i < shuffled.length; i += 2) {
-      teams.push({
-        id: idCounter,
-        name: `Team ${idCounter}`,
-        p1: shuffled[i],
-        p2: shuffled[i + 1]
-      });
-      idCounter++;
-    }
-
-    groups = [];
-    groupMatches = [];
-    koMatches = [];
-    saveData();
-    showTab('teams');
-  }
-}
-
+// 8. Gruppen & KO-Phase Logik
 function drawGroups() {
   if (!isAdmin()) return;
   if (teams.length < 4) return alert('Du benötigst mindestens 4 Teams für Gruppen!');
@@ -452,10 +629,8 @@ function drawGroups() {
   }
 }
 
-// 6. KO-PHASE LOGIK (VF, HF, Finale & Platz 3)
 function drawKOPhase() {
   if (!isAdmin()) return;
-  
   const standings = calculateGroupStandings();
   const qualified1st = [];
   const qualified2nd = [];
@@ -495,7 +670,6 @@ function drawKOPhase() {
 
 function drawSemifinals() {
   if (!isAdmin()) return;
-
   const qfMatches = koMatches.filter(m => m.round === 'Viertelfinale');
   const winners = [];
 
@@ -506,28 +680,20 @@ function drawSemifinals() {
     }
   });
 
-  if (winners.length < 4) {
-    return alert('Es müssen erst alle 4 Viertelfinal-Spiele beendet sein!');
-  }
+  if (winners.length < 4) return alert('Es müssen erst alle 4 Viertelfinal-Spiele beendet sein!');
 
   if (confirm('Halbfinale jetzt zufällig aus den 4 Siegern auslosen?')) {
     const shuffledWinners = [...winners].sort(() => Math.random() - 0.5);
     
     koMatches.push({
-      id: 201,
-      round: 'Halbfinale 1',
-      court: 'Hauptplatz',
-      t1Id: shuffledWinners[0],
-      t2Id: shuffledWinners[1],
+      id: 201, round: 'Halbfinale 1', court: 'Hauptplatz',
+      t1Id: shuffledWinners[0], t2Id: shuffledWinners[1],
       score1: null, score2: null, played: false
     });
 
     koMatches.push({
-      id: 202,
-      round: 'Halbfinale 2',
-      court: 'Nebenplatz',
-      t1Id: shuffledWinners[2],
-      t2Id: shuffledWinners[3],
+      id: 202, round: 'Halbfinale 2', court: 'Nebenplatz',
+      t1Id: shuffledWinners[2], t2Id: shuffledWinners[3],
       score1: null, score2: null, played: false
     });
 
@@ -538,37 +704,25 @@ function drawSemifinals() {
 
 function drawFinals() {
   if (!isAdmin()) return;
-
   const hf1 = koMatches.find(m => m.round === 'Halbfinale 1');
   const hf2 = koMatches.find(m => m.round === 'Halbfinale 2');
 
-  if (!hf1 || !hf2 || !hf1.played || !hf2.played) {
-    return alert('Beide Halbfinal-Spiele müssen erst beendet sein!');
-  }
+  if (!hf1 || !hf2 || !hf1.played || !hf2.played) return alert('Beide Halbfinal-Spiele müssen erst beendet sein!');
 
   const hf1Winner = hf1.score1 > hf1.score2 ? hf1.t1Id : hf1.t2Id;
   const hf1Loser  = hf1.score1 > hf1.score2 ? hf1.t2Id : hf1.t1Id;
-
   const hf2Winner = hf2.score1 > hf2.score2 ? hf2.t1Id : hf2.t2Id;
   const hf2Loser  = hf2.score1 > hf2.score2 ? hf2.t2Id : hf2.t1Id;
 
   if (confirm('Finale & Spiel um Platz 3 jetzt erstellen?')) {
     koMatches.push({
-      id: 301,
-      round: '🥉 Spiel um Platz 3',
-      court: 'Nebenplatz',
-      t1Id: hf1Loser,
-      t2Id: hf2Loser,
-      score1: null, score2: null, played: false
+      id: 301, round: '🥉 Spiel um Platz 3', court: 'Nebenplatz',
+      t1Id: hf1Loser, t2Id: hf2Loser, score1: null, score2: null, played: false
     });
 
     koMatches.push({
-      id: 302,
-      round: '🏆 FINALE',
-      court: 'Hauptplatz',
-      t1Id: hf1Winner,
-      t2Id: hf2Winner,
-      score1: null, score2: null, played: false
+      id: 302, round: '🏆 FINALE', court: 'Hauptplatz',
+      t1Id: hf1Winner, t2Id: hf2Winner, score1: null, score2: null, played: false
     });
 
     saveData();
@@ -588,7 +742,7 @@ function resetTournament() {
   }
 }
 
-// 7. Bearbeitungsrechte & Siegerehrung
+// 9. Match & Team Updates
 function updateTeamName(teamId, newName) {
   const team = teams.find(t => t.id === teamId);
   if (!team) return;
@@ -619,30 +773,22 @@ function updateMatchScore(matchId, isKO, score1Val, score2Val) {
   }
 
   if (score1Val === '' || score2Val === '') {
-    match.score1 = null;
-    match.score2 = null;
-    match.played = false;
+    match.score1 = null; match.score2 = null; match.played = false;
   } else {
     const s1 = parseInt(score1Val, 10);
     const s2 = parseInt(score2Val, 10);
 
-    if (isKO && s1 === s2) {
-      alert('In der KO-Phase muss es einen Sieger geben (z. B. nach Verlängerung/Elfmeterschießen)!');
-      return;
-    }
+    if (isKO && s1 === s2) return alert('In der KO-Phase muss es einen Sieger geben!');
 
-    match.score1 = s1;
-    match.score2 = s2;
-    match.played = true;
+    match.score1 = s1; match.score2 = s2; match.played = true;
 
-    // FEIERLICHE SIEGEREHRUNG BEI FINALSPIEL
     if (match.round === '🏆 FINALE') {
       const winnerTeamId = s1 > s2 ? match.t1Id : match.t2Id;
       const winnerTeam = teams.find(t => t.id === winnerTeamId);
 
       if (winnerTeam) {
         setTimeout(() => {
-          alert(`🎉 🏆 DIE SIEGER DES FAL FIFA TURNIERS SIND: 🏆 🎉\n\n🥇 ${winnerTeam.p1} & ${winnerTeam.p2} (${winnerTeam.name}) 🥇\n\nHerzlichen Glückwunsch zum Turniersieg! 👏🥳`);
+          alert(`🎉 🏆 DIE SIEGER DES FAL FIFA TURNIERS SIND: 🏆 🎉\n\n🥇 ${winnerTeam.p1} & ${winnerTeam.p2} (${winnerTeam.name} - ${winnerTeam.club || ''}) 🥇\n\nHerzlichen Glückwunsch! 👏🥳`);
         }, 300);
       }
     }
@@ -651,7 +797,7 @@ function updateMatchScore(matchId, isKO, score1Val, score2Val) {
   saveData();
 }
 
-// 8. Render-Funktionen
+// 10. Render Panel & UI
 function renderAll() {
   renderTeams();
   renderGroups();
@@ -664,23 +810,25 @@ function renderTeams() {
   if (!container) return;
 
   if (teams.length === 0) {
-    container.innerHTML = '<p class="empty-state">Noch keine Teams gelost. Der Admin muss die 2er-Teams auslosen.</p>';
+    container.innerHTML = '<p class="empty-state">Noch keine Teams gelost. Gehe in den Admin-Bereich und starte die Auslosungs-Show.</p>';
     return;
   }
 
   container.innerHTML = teams.map(t => {
     const isMyTeam = (myPlayerName && (t.p1 === myPlayerName || t.p2 === myPlayerName));
     const canEditName = canManageMatches() || isMyTeam;
+    const clubBadgeHtml = t.club ? `<div class="club-badge">⚽ ${t.club}</div>` : '';
 
     return `
       <div class="admin-card ${isMyTeam ? 'highlight-me' : ''}">
-        <div style="display: flex; gap: 10px; align-items: center;">
+        <div style="display: flex; justify-size: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
           <input type="text" value="${t.name}" 
                  ${canEditName ? '' : 'disabled'} 
                  onchange="updateTeamName(${t.id}, this.value)"
-                 style="font-weight: bold; font-size: 1.1em; max-width: 220px;">
-          ${isMyTeam ? '<span style="color:var(--fal-yellow); font-weight:bold;">⭐ (Dein Team)</span>' : ''}
+                 style="font-weight: bold; font-size: 1.1em; max-width: 180px;">
+          ${clubBadgeHtml}
         </div>
+        ${isMyTeam ? '<div style="color:var(--fal-yellow); font-size:0.85em; font-weight:bold; margin-top:4px;">⭐ (Dein Team)</div>' : ''}
         <p style="margin-top: 8px; margin-bottom:0;">Mitglieder: <strong>${t.p1}</strong> & <strong>${t.p2}</strong></p>
       </div>
     `;
@@ -692,7 +840,9 @@ function calculateGroupStandings() {
     const stats = {};
     g.teams.forEach(tId => {
       const teamObj = teams.find(t => t.id === tId);
-      stats[tId] = { teamId: tId, name: teamObj ? teamObj.name : `Team ${tId}`, played: 0, gf: 0, ga: 0, diff: 0, points: 0 };
+      let displayName = teamObj ? teamObj.name : `Team ${tId}`;
+      if (teamObj && teamObj.club) displayName += ` (${teamObj.club})`;
+      stats[tId] = { teamId: tId, name: displayName, played: 0, gf: 0, ga: 0, diff: 0, points: 0 };
     });
 
     groupMatches.filter(m => m.group === g.letter && m.played).forEach(m => {
@@ -789,7 +939,7 @@ function renderMatches() {
             <div class="admin-card highlight-me" style="text-align: center; margin-bottom: 25px; background: linear-gradient(135deg, #132A4A, #1A3E66);">
               <h2 style="color: var(--fal-yellow); margin: 0 0 10px 0;">🏆 TURNIERSIEGER 🏆</h2>
               <h3 style="font-size: 1.5em; margin: 0; color: white;">${winnerTeam.p1} & ${winnerTeam.p2}</h3>
-              <p style="margin: 5px 0 0 0; color: var(--fal-yellow); font-weight: bold;">(${winnerTeam.name})</p>
+              <p style="margin: 5px 0 0 0; color: var(--fal-yellow); font-weight: bold;">(${winnerTeam.name} - ${winnerTeam.club || ''})</p>
             </div>
           `;
         }
@@ -826,6 +976,9 @@ function renderMatchCard(m, isKO, myTeam) {
   const roundTitle = m.round ? `${m.round}` : `Runde ${m.slot} • ${m.group}`;
   const isFinal = m.round === '🏆 FINALE';
 
+  const t1Label = t1 ? `${t1.name} ${t1.club ? '(' + t1.club + ')' : ''}` : 'Team 1';
+  const t2Label = t2 ? `${t2.name} ${t2.club ? '(' + t2.club + ')' : ''}` : 'Team 2';
+
   return `
     <div class="match-card ${isFinal ? 'highlight-me' : ''}">
       <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -833,7 +986,7 @@ function renderMatchCard(m, isKO, myTeam) {
         <span class="court-badge ${courtClass}">${m.court}</span>
       </div>
       <div style="display:flex; justify-content:space-between; align-items:center; margin: 10px 0;">
-        <span style="font-size: 1.05em;"><strong>${t1 ? t1.name : 'Team 1'}</strong> vs <strong>${t2 ? t2.name : 'Team 2'}</strong></span>
+        <span style="font-size: 0.95em;"><strong>${t1Label}</strong> <br><small style="opacity:0.7;">vs</small><br> <strong>${t2Label}</strong></span>
       </div>
       <div style="display:flex; gap: 8px; align-items:center;">
         <input type="number" min="0" value="${m.score1 !== null ? m.score1 : ''}" 
@@ -849,33 +1002,41 @@ function renderMatchCard(m, isKO, myTeam) {
 
 function renderAdminPanel() {
   const playerListEl = document.getElementById('admin-player-list');
-  if (!playerListEl) return;
+  const clubListEl = document.getElementById('admin-club-list');
 
-  playerListEl.innerHTML = players.map((p, index) => {
-    const hasPW = !!p.password;
-    const isRefBtnClass = p.isRef ? 'btn-primary' : 'btn-secondary';
+  if (playerListEl) {
+    playerListEl.innerHTML = players.map((p, index) => {
+      const hasPW = !!p.password;
+      const isRefBtnClass = p.isRef ? 'btn-primary' : 'btn-secondary';
 
-    return `
-      <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; background: var(--fal-blue-primary); padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; gap: 8px;">
-        <div>
-          <strong>${index + 1}. ${p.name}</strong> 
-          ${p.isRef ? '<span style="color:var(--fal-yellow); font-size:0.85em;">[🟨 Ref]</span>' : ''}
-          ${hasPW ? '<span style="font-size:0.85em; opacity:0.8;">[🔒 PW]</span>' : ''}
+      return `
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; background: var(--fal-blue-primary); padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; gap: 8px;">
+          <div>
+            <strong>${index + 1}. ${p.name}</strong> 
+            ${p.isRef ? '<span style="color:var(--fal-yellow); font-size:0.85em;">[🟨 Ref]</span>' : ''}
+            ${hasPW ? '<span style="font-size:0.85em; opacity:0.8;">[🔒 PW]</span>' : ''}
+          </div>
+
+          <div style="display:flex; gap: 5px; flex-wrap:wrap;">
+            <button class="${isRefBtnClass} btn-sm" onclick="toggleRef(${index})">
+              ${p.isRef ? '🟨 Ref (Aktiv)' : 'Ref vergeben'}
+            </button>
+            ${hasPW 
+              ? `<button class="btn-danger btn-sm" onclick="removePlayerPassword(${index})">PW löschen</button>`
+              : `<button class="btn-secondary btn-sm" onclick="setPlayerPassword(${index})">+ PW</button>`
+            }
+            <button class="btn-danger btn-sm" onclick="removePlayer(${index})">🗑️</button>
+          </div>
         </div>
+      `;
+    }).join('');
+  }
 
-        <div style="display:flex; gap: 5px; flex-wrap:wrap;">
-          <button class="${isRefBtnClass} btn-sm" onclick="toggleRef(${index})">
-            ${p.isRef ? '🟨 Ref (Aktiv)' : 'Ref vergeben'}
-          </button>
-
-          ${hasPW 
-            ? `<button class="btn-danger btn-sm" onclick="removePlayerPassword(${index})">PW löschen</button>`
-            : `<button class="btn-secondary btn-sm" onclick="setPlayerPassword(${index})">+ PW</button>`
-          }
-
-          <button class="btn-danger btn-sm" onclick="removePlayer(${index})">🗑️</button>
-        </div>
-      </div>
-    `;
-  }).join('');
+  if (clubListEl) {
+    clubListEl.innerHTML = availableClubs.map((club, index) => `
+      <span class="club-badge">
+        ${club} <span style="cursor:pointer; color:#ff4d4d; font-weight:bold; margin-left:4px;" onclick="removeClub(${index})">×</span>
+      </span>
+    `).join('');
+  }
 }
