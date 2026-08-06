@@ -986,6 +986,7 @@ function renderAll() {
   renderGroups();
   renderMatches();
   renderAdminPanel();
+  renderBettingSystem();
 }
 
 // 10a. HOME: Regeln, Tippspiel, Dashboard
