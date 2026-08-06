@@ -273,7 +273,7 @@ function confirmAdminPassword() {
       pendingAdminLogin = false;
       enterAsSpectator();
     } else {
-      alert('Falsches Admin-Passwort!');
+      alert('Versuchs erst gar nicht');
     }
   } else if (pendingAdminLogin.type === 'player') {
     const pObj = getPlayerObj(pendingAdminLogin.name);
