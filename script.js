@@ -29,6 +29,7 @@ window.nextDraftStep = nextDraftStep;
 window.finishDraft = finishDraft;
 window.saveRules = saveRules;
 window.submitTip = submitTip;
+window.placeBet = placeBet;
 
 // 1. Firebase Konfiguration
 const firebaseConfig = {
@@ -67,6 +68,8 @@ let rules = DEFAULT_RULES;
 let tips = {};
 let myPlayerName = localStorage.getItem('fifa_my_player') || null;
 let pendingAdminLogin = false;
+let userBalances = {}; // Speichert die Coins pro Spieler { "Name": 100 }
+let bets = [];         // Speichert alle abgegebenen Wetten
 
 // Interaktive Auslosung (Live-Synced)
 let draftState = {
@@ -312,13 +315,29 @@ db.ref('tournament').on('value', (snapshot) => {
   rules = data.rules || DEFAULT_RULES;
   tips = data.tips || {};
   draftState = data.draftState || { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, startTime: null, targetAngle: 0, duration: 4000, lastDrawnClub: null };
+  
+  // Neu für das Wett-System:
+  userBalances = data.userBalances || {};
+  bets = data.bets || [];
 
   renderAll();
   handleLiveDraftUI();
 });
 
 function saveData() {
-  db.ref('tournament').set({ players, availableClubs, teams, groups, groupMatches, koMatches, rules, tips, draftState });
+  db.ref('tournament').set({ 
+    players, 
+    availableClubs, 
+    teams, 
+    groups, 
+    groupMatches, 
+    koMatches, 
+    rules, 
+    tips, 
+    draftState,
+    userBalances,
+    bets
+  });
 }
 
 // 5. Profi-Clubs Verwaltung
@@ -1342,4 +1361,131 @@ function renderAdminPanel() {
       </span>
     `).join('');
   }
+}
+// ==========================================
+// 🎯 WETT-SYSTEM LOGIK & RENDERING
+// ==========================================
+
+function getUserBalance(playerName) {
+  if (!playerName) return 0;
+  if (userBalances[playerName] === undefined) {
+    userBalances[playerName] = 100; // Startguthaben für jeden neuen Spieler
+  }
+  return userBalances[playerName];
+}
+
+function renderBettingSystem() {
+  const balanceEl = document.getElementById('user-coin-balance');
+  const matchesListEl = document.getElementById('betting-matches-list');
+  const leaderboardEl = document.getElementById('betting-leaderboard');
+
+  if (!balanceEl || !matchesListEl || !leaderboardEl) return;
+
+  // 1. Kontostand anzeigen
+  const currentBalance = myPlayerName ? getUserBalance(myPlayerName) : 0;
+  balanceEl.innerText = currentBalance;
+
+  // 2. Nächste ungespielte Spiele laden
+  const upcomingMatches = [...groupMatches, ...koMatches]
+    .filter(m => !m.played && m.t1Id && m.t2Id)
+    .slice(0, 3); // Max 3 nächste Spiele zum Wetten anzeigen
+
+  if (upcomingMatches.length === 0) {
+    matchesListEl.innerHTML = '<p style="opacity:0.7;">Aktuell keine anstehenden Spiele zum Wetten verfügbar.</p>';
+  } else {
+    matchesListEl.innerHTML = upcomingMatches.map(m => {
+      const t1 = teams.find(t => t.id === m.t1Id);
+      const t2 = teams.find(t => t.id === m.t2Id);
+      if (!t1 || !t2) return '';
+
+      // Prüfen, ob der User bereits auf dieses Spiel gewettet hat
+      const myExistingBet = bets.find(b => b.matchId === m.id && b.playerName === myPlayerName);
+
+      return `
+        <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.1);">
+          <div style="font-size: 0.85em; opacity: 0.8; margin-bottom: 5px;">${m.round || m.group || 'Spiel'}</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-weight: bold; margin-bottom: 10px;">
+            <span>${t1.p1}/${t1.p2} (${t1.club || 'Team 1'})</span>
+            <span style="color: var(--fal-yellow);">VS</span>
+            <span>${t2.p1}/${t2.p2} (${t2.club || 'Team 2'})</span>
+          </div>
+          
+          ${myExistingBet ? `
+            <div style="text-align:center; font-size: 0.9em; color: var(--fal-yellow); background: rgba(0,0,0,0.2); padding: 5px; border-radius: 5px;">
+              ✅ Gewettet: <strong>${myExistingBet.amount} Coins</strong> auf <strong>${myExistingBet.chosenTeamId === t1.id ? t1.club : t2.club}</strong>
+            </div>
+          ` : `
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <select id="bet-team-${m.id}" style="flex: 2; padding: 6px; border-radius: 4px;">
+                <option value="${t1.id}">${t1.club || t1.name}</option>
+                <option value="${t2.id}">${t2.club || t2.name}</option>
+              </select>
+              <input type="number" id="bet-amount-${m.id}" placeholder="Coins" min="1" max="${currentBalance}" style="flex: 1; padding: 6px; border-radius: 4px;">
+              <button class="btn-primary" style="padding: 6px 12px; font-size: 0.9em;" onclick="placeBet(${m.id})">Wetten</button>
+            </div>
+          `}
+        </div>
+      `;
+    }).join('');
+  }
+
+  // 3. Highroller Ranking
+  const sortedUsers = Object.keys(userBalances)
+    .map(name => ({ name, balance: userBalances[name] }))
+    .sort((a, b) => b.balance - a.balance);
+
+  if (sortedUsers.length === 0) {
+    leaderboardEl.innerHTML = '<p style="font-size:0.85em; opacity:0.7;">Noch keine Konten aktiv.</p>';
+  } else {
+    leaderboardEl.innerHTML = sortedUsers.map((u, i) => `
+      <div style="display: flex; justify-content: space-between; font-size: 0.9em; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <span>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`} ${u.name}</span>
+        <span style="font-weight: bold; color: var(--fal-yellow);">${u.balance} 🪙</span>
+      </div>
+    `).join('');
+  }
+}
+
+function placeBet(matchId) {
+  if (!myPlayerName) return alert('Bitte melde dich erst an, um zu wetten!');
+
+  const teamSelect = document.getElementById(`bet-team-${matchId}`);
+  const amountInput = document.getElementById(`bet-amount-${matchId}`);
+
+  const chosenTeamId = parseInt(teamSelect.value);
+  const amount = parseInt(amountInput.value);
+  const currentBalance = getUserBalance(myPlayerName);
+
+  if (isNaN(amount) || amount <= 0) return alert('Bitte einen gültigen Wettbetrag eingeben!');
+  if (amount > currentBalance) return alert('Du hast nicht genügend FAL-Coins!');
+
+  // Coins abziehen
+  userBalances[myPlayerName] -= amount;
+
+  // Wette einspeichern
+  bets.push({
+    matchId: matchId,
+    playerName: myPlayerName,
+    chosenTeamId: chosenTeamId,
+    amount: amount
+  });
+
+  saveData();
+}
+
+// Auswertung der Wetten bei Spielende (Wird aufgerufen wenn ein Match-Ergebnis eingetragen wird)
+function evaluateBetsForMatch(matchId, winningTeamId) {
+  const matchBets = bets.filter(b => b.matchId === matchId);
+
+  matchBets.forEach(b => {
+    if (b.chosenTeamId === winningTeamId) {
+      // Gewinn: Verdopplung des Einsatzes (Quote 2.0)
+      const winAmount = b.amount * 2;
+      userBalances[b.playerName] = (userBalances[b.playerName] || 0) + winAmount;
+    }
+  });
+
+  // Abgearbeitete Wetten entfernen
+  bets = bets.filter(b => b.matchId !== matchId);
+  saveData();
 }
