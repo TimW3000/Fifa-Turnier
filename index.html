@@ -78,7 +78,7 @@
   </nav>
 
   <main id="app-main" style="display: none;">
-    <!-- HOME TAB -->
+   <!-- HOME TAB -->
     <section id="tab-home" class="tab-content active">
       <h2>🏠 Übersicht</h2>
 
@@ -96,8 +96,39 @@
         <h3 style="margin-top:0;">📈 Live-Dashboard</h3>
         <div id="dashboard-content"></div>
       </div>
-    </section>
 
+      <!-- ========================================== -->
+      <!-- 🎯 HIER STARTET DER WETT-KONTO SCHNIPSEL   -->
+      <!-- ========================================== -->
+      <div class="admin-card" style="margin-top: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+          <h3 style="color:var(--fal-yellow, #f1c40f); margin:0;">🎯 Wettschein & FAL-Coins</h3>
+          <div style="background: rgba(241, 196, 15, 0.2); border: 1px solid var(--fal-yellow, #f1c40f); padding: 6px 14px; border-radius: 20px; font-weight: bold; font-size: 1em;">
+            🪙 Mein Kontostand: <span id="user-coin-balance" style="color: var(--fal-yellow, #f1c40f);">100</span> FAL-Coins
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;" class="betting-grid-responsive">
+          <!-- NÄCHSTE SPIELE ZUM WETTEN -->
+          <div>
+            <h4 style="margin-top: 0; opacity: 0.9;">🔥 Nächste Spiele zum Wetten</h4>
+            <div id="betting-matches-list">
+              <p style="opacity: 0.7;">Noch keine Spiele zum Wetten verfügbar.</p>
+            </div>
+          </div>
+
+          <!-- WETT-LEADERBOARD -->
+          <div style="background: rgba(0,0,0,0.25); padding: 15px; border-radius: 8px;">
+            <h4 style="margin-top: 0; color: var(--fal-yellow, #f1c40f);">🏆 Highroller Ranking</h4>
+            <div id="betting-leaderboard">
+              <!-- Dynamische Rangliste -->
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- ========================================== -->
+
+    </section>
     <!-- TEAMS TAB -->
     <section id="tab-teams" class="tab-content">
       <h2>Angemeldete Teams</h2>
