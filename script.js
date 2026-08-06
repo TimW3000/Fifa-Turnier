@@ -229,7 +229,7 @@ function registerNewPlayer() {
   if (!name) return alert('Bitte Namen eingeben!');
 
   if (name.toLowerCase() === 'tim') {
-    promptPassword('admin', name, '🔒 Admin-Login für Tim: Bitte Passwort eingeben');
+    promptPassword('admin', name, '🔒 Zugang gesperrt!');
     return;
   }
 
