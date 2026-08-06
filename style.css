@@ -409,3 +409,91 @@ th {
   margin: 0;
   line-height: 1.5;
 }
+/* ==========================================
+   WETT-KONTO & QUOTEN STYLES
+   ========================================== */
+.bet-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.bet-odds-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-odd {
+  flex: 1;
+  background: #1a252f;
+  border: 1px solid #34495e;
+  color: #fff;
+  padding: 8px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.btn-odd:hover:not(:disabled) {
+  background: #2c3e50;
+  border-color: var(--fal-yellow, #f1c40f);
+}
+
+.btn-odd.active {
+  background: var(--fal-yellow, #f1c40f);
+  color: #000;
+  font-weight: bold;
+}
+
+.btn-odd:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.odd-val {
+  font-size: 0.85em;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+.btn-odd.active .odd-val {
+  color: #000;
+  font-weight: bold;
+}
+
+.bet-input-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  align-items: center;
+}
+
+.bet-input-row input {
+  width: 90px;
+  padding: 6px;
+  border-radius: 4px;
+  border: 1px solid #444;
+  background: #1e1e1e;
+  color: #fff;
+  text-align: center;
+}
+
+.leaderboard-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 0.9em;
+}
+
+@media (max-width: 768px) {
+  .betting-grid-responsive {
+    grid-template-columns: 1fr !important;
+  }
+}
