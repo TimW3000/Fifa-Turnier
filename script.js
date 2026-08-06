@@ -549,14 +549,34 @@ function removePlayerPassword(index) {
   }
 }
 
-// 8. Gruppen & KO-Phase Logik
+// 8. Gruppen & KO-Phase Logik (Flexibel je nach Team-Anzahl)
 function drawGroups() {
   if (!isAdmin()) return;
   if (teams.length < 4) return alert('Du benötigst mindestens 4 Teams für Gruppen!');
 
-  if (confirm('Gruppen jetzt neu auslosen & optimierten Spielplan erstellen?')) {
+  // Modus basierend auf Team-Anzahl anbieten
+  let choice = prompt(
+    `Du hast aktuell ${teams.length} Teams.\n\n` +
+    `Wähle den Turniermodus:\n` +
+    `1 = 2 Gruppen (Top 2 je Gruppe gehen ins HALBFINALE)\n` +
+    `2 = 4 Gruppen (Top 2 je Gruppe gehen ins VIERTELFINALE)\n\n` +
+    `Eingabe (1 oder 2):`, 
+    teams.length <= 8 ? "1" : "2"
+  );
+
+  if (!choice) return; // Abbrechen gewählt
+
+  let groupLetters = [];
+  if (choice.trim() === "1") {
+    groupLetters = ['Gruppe A', 'Gruppe B'];
+  } else if (choice.trim() === "2") {
+    groupLetters = ['Gruppe A', 'Gruppe B', 'Gruppe C', 'Gruppe D'];
+  } else {
+    return alert('Ungültige Auswahl! Bitte 1 oder 2 eingeben.');
+  }
+
+  if (confirm(`Gruppen neu auslosen (${groupLetters.length} Gruppen) & Spielplan erstellen?`)) {
     const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
-    const groupLetters = ['Gruppe A', 'Gruppe B', 'Gruppe C', 'Gruppe D'];
     
     groups = groupLetters.map(letter => ({ letter, teams: [] }));
     
@@ -680,6 +700,41 @@ function drawKOPhase() {
 
 function drawSemifinals() {
   if (!isAdmin()) return;
+
+  const standings = calculateGroupStandings();
+
+  // Prüfen, ob Halbfinale direkt aus 2 Gruppen kommt (bei 2 Gruppen)
+  if (groups.length === 2) {
+    const groupA = standings.find(g => g.letter === 'Gruppe A');
+    const groupB = standings.find(g => g.letter === 'Gruppe B');
+
+    if (!groupA || !groupB || groupA.rankings.length < 2 || groupB.rankings.length < 2) {
+      return alert('Es müssen in beiden Gruppen genügend Spiele abgeschlossen sein!');
+    }
+
+    if (confirm('Halbfinale Über-Kreuz erstellen? (A1 vs B2 & B1 vs A2)')) {
+      koMatches = [
+        {
+          id: 201, round: 'Halbfinale 1', court: 'Hauptplatz',
+          t1Id: groupA.rankings[0].teamId, // A1
+          t2Id: groupB.rankings[1].teamId, // B2
+          score1: null, score2: null, played: false
+        },
+        {
+          id: 202, round: 'Halbfinale 2', court: 'Nebenplatz',
+          t1Id: groupB.rankings[0].teamId, // B1
+          t2Id: groupA.rankings[1].teamId, // A2
+          score1: null, score2: null, played: false
+        }
+      ];
+
+      saveData();
+      showTab('matches');
+    }
+    return;
+  }
+
+  // Standard-Fall (bei 4 Gruppen): aus den 4 Viertelfinal-Siegern
   const qfMatches = koMatches.filter(m => m.round === 'Viertelfinale');
   const winners = [];
 
