@@ -946,6 +946,10 @@ function updateMatchScore(matchId, isKO, score1Val, score2Val) {
   const matchArray = isKO ? koMatches : groupMatches;
   const match = matchArray.find(m => m.id === matchId);
   if (!match) return;
+  if (match.betsEvaluated) {
+    alert('Dieses Spiel wurde bereits bestätigt und ausgezahlt. Der Spielstand ist gesperrt!');
+    return;
+  }
 
   const myTeam = getMyTeam();
   const canEdit = canManageMatches() || (myTeam && (match.t1Id === myTeam.id || match.t2Id === myTeam.id));
