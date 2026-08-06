@@ -1320,13 +1320,15 @@ function renderMatchCard(m, isKO, myTeam) {
       </div>
       <div style="display:flex; gap: 8px; align-items:center;">
         <input type="number" min="0" value="${m.score1 !== null ? m.score1 : ''}" 
-               ${canEdit ? '' : 'disabled'} id="score1-${m.id}" placeholder="-" style="width: 60px;">
+               ${canEdit && !m.betsEvaluated ? '' : 'disabled'} id="score1-${m.id}" placeholder="-" style="width: 60px;">
         <span>:</span>
         <input type="number" min="0" value="${m.score2 !== null ? m.score2 : ''}" 
-               ${canEdit ? '' : 'disabled'} id="score2-${m.id}" placeholder="-" style="width: 60px;">
+               ${canEdit && !m.betsEvaluated ? '' : 'disabled'} id="score2-${m.id}" placeholder="-" style="width: 60px;">
         ${canEdit ? `
-          <button class="btn-primary btn-sm" onclick="updateMatchScore(${m.id}, ${isKO}, document.getElementById('score1-${m.id}').value, document.getElementById('score2-${m.id}').value)">
-            ${canManageMatches() ? (m.betsEvaluated ? '✓ Ausgezahlt' : (m.played ? '✓ Bestätigen & Auszahlen' : 'Speichern')) : 'Speichern'}
+          <button class="${m.betsEvaluated ? 'btn-secondary' : 'btn-primary'} btn-sm" 
+                  ${m.betsEvaluated ? 'disabled' : ''} 
+                  onclick="updateMatchScore(${m.id}, ${isKO}, document.getElementById('score1-${m.id}').value, document.getElementById('score2-${m.id}').value)">
+            ${canManageMatches() ? (m.betsEvaluated ? '🔒 Ausgezahlt & Fix' : (m.played ? '✓ Bestätigen & Auszahlen' : 'Speichern')) : 'Speichern'}
           </button>
         ` : ''}
 
