@@ -1326,7 +1326,7 @@ function renderMatchCard(m, isKO, myTeam) {
                ${canEdit ? '' : 'disabled'} id="score2-${m.id}" placeholder="-" style="width: 60px;">
         ${canEdit ? `
           <button class="btn-primary btn-sm" onclick="updateMatchScore(${m.id}, ${isKO}, document.getElementById('score1-${m.id}').value, document.getElementById('score2-${m.id}').value)">
-            ${canManageMatches() && m.played ? '✓ Bestätigen & Auszahlen' : 'Speichern'}
+            ${canManageMatches() ? (m.betsEvaluated ? '✓ Ausgezahlt' : (m.played ? '✓ Bestätigen & Auszahlen' : 'Speichern')) : 'Speichern'}
           </button>
         ` : ''}
 
@@ -1500,5 +1500,9 @@ function evaluateBetsForMatch(matchId, winningTeamId) {
 
   // Abgearbeitete Wetten entfernen
   bets = bets.filter(b => b.matchId !== matchId);
+  const match = [...groupMatches, ...koMatches].find(m => m.id === matchId);
+  if (match) {
+    match.betsEvaluated = true;
+  }
   saveData();
 }
