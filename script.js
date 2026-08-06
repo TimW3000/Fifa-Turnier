@@ -400,7 +400,7 @@ function renderDraftStep() {
     <div id="spin-result" style="height: 35px; font-weight: bold; font-size: 1.2em; color: var(--fal-yellow); margin-top:5px;"></div>
 
     <button class="btn-primary role-btn" id="btn-spin-wheel" style="margin-top:10px;" onclick="spinWheel()">
-      🎰 Rad drehen (${remainingClubsForDraft.length} Teams übrig)!
+      🎰 Rad drehen
     </button>
   `;
 
@@ -457,9 +457,10 @@ function spinWheel() {
   const numClubs = remainingClubsForDraft.length;
   const sliceAngle = (2 * Math.PI) / numClubs;
 
-  // Berechne Zielwinkel so, dass die Nadel (oben) auf das Segment zeigt
-  const targetSegmentAngle = 2.5 * Math.PI - (targetIndex + 0.5) * sliceAngle;
-  const totalRotation = (2 * Math.PI * 5) + targetSegmentAngle; // 5 volle Umdrehungen + Ziel
+  // Exakte Position für den oberen Zeiger (12 Uhr / 1.5 * Math.PI)
+  const targetSegmentCenter = (targetIndex + 0.5) * sliceAngle;
+  const targetAngleAtTop = (1.5 * Math.PI) - targetSegmentCenter;
+  const totalRotation = (2 * Math.PI * 5) + targetAngleAtTop; // 5 volle Umdrehungen + Ziel
 
   let start = null;
   const duration = 4000; // 4 Sekunden Animation
@@ -468,6 +469,7 @@ function spinWheel() {
     if (!start) start = timestamp;
     const progress = Math.min((timestamp - start) / duration, 1);
     
+    // Smooth Ease-Out Kurve
     const easeOut = 1 - Math.pow(1 - progress, 3);
     const currentAngle = easeOut * totalRotation;
 
@@ -481,7 +483,7 @@ function spinWheel() {
         resultEl.innerHTML = `⚽ Gewählter Club: <u>${targetClub}</u>`;
       }
 
-      // Gezogenen Club aus dem aktiven Pool entfernen!
+      // Gezogenen Club aus dem aktiven Pool entfernen
       remainingClubsForDraft.splice(targetIndex, 1);
 
       setTimeout(() => {
