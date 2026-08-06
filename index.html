@@ -88,32 +88,23 @@
 
     <!-- TAB: DASHBOARD / STARTSEITE -->
     <section id="tab-dashboard" class="tab-content active">
-      <!-- KREATIV-STATISTIKEN / DASHBOARD -->
       <div class="admin-card" style="margin-bottom: 20px;">
         <h2 style="color:var(--fal-yellow, #f1c40f); margin-top:0;">📊 Turnier-Analytics & KI-Prognose</h2>
-        <div id="stats-dashboard-container">
-          <!-- Wird dynamisch per JS gefüllt -->
-        </div>
+        <div id="stats-dashboard-container"></div>
       </div>
 
-      <!-- TIPP-WETTBEWERB -->
       <div class="admin-card" style="margin-bottom: 20px;">
         <h2 style="color:var(--fal-yellow, #f1c40f); margin-top:0;">🎯 Wettbasis: Wer holt den Pokal?</h2>
-        <div id="betting-container">
-          <!-- Wird dynamisch per JS gefüllt -->
-        </div>
+        <div id="betting-container"></div>
       </div>
 
-      <!-- REGELN -->
       <div class="admin-card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
           <h2 style="color:var(--fal-yellow, #f1c40f); margin:0;">📜 Reglement & Turnierregeln</h2>
           <button id="btn-edit-rules" class="btn-secondary" style="display:none;" onclick="toggleRulesEdit()">✏️ Regeln bearbeiten</button>
         </div>
         
-        <div id="rules-display-area" style="white-space: pre-line; line-height: 1.6; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
-          <!-- Dynamischer Regeltext -->
-        </div>
+        <div id="rules-display-area" style="white-space: pre-line; line-height: 1.6; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;"></div>
 
         <div id="rules-edit-area" style="display:none; margin-top:10px;">
           <textarea id="rules-textarea" rows="8" style="width:100%; padding:10px; border-radius:6px; background:#1e1e1e; color:#fff; border:1px solid #444; font-family:sans-serif;"></textarea>
@@ -180,7 +171,6 @@
     </section>
   </main>
 
-  <!-- AUDIO FÜR SOUND-EFFEKTE (Web Audio Synthesizer Fallback ist im Skript hinterlegt) -->
   <audio id="sound-tick" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3" preload="auto"></audio>
   <audio id="sound-fanfare" src="https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3" preload="auto"></audio>
 
