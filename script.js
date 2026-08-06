@@ -1,6 +1,4 @@
-// ==========================================
-// 0. GLOBAL VERFÜGBAR MACHEN (WINDOW EXPORTS)
-// ==========================================
+// Global verfügbar machen
 window.showExistingPlayers = showExistingPlayers;
 window.showNewPlayerInput = showNewPlayerInput;
 window.resetRoleSelection = resetRoleSelection;
@@ -30,9 +28,7 @@ window.spinWheel = spinWheel;
 window.nextDraftStep = nextDraftStep;
 window.finishDraft = finishDraft;
 
-// ==========================================
-// 1. FIREBASE KONFIGURATION & INIT
-// ==========================================
+// 1. Firebase Konfiguration
 const firebaseConfig = {
   apiKey: "AIzaSyBh0yOA1ckPp3TFBJ-Yz932k9A2R1pkTSc",
   authDomain: "fal-fifa-turnier.firebaseapp.com",
@@ -56,14 +52,7 @@ const DEFAULT_CLUBS = [
   "FC Liverpool", "Juventus", "Atletico Madrid", "Borussia Dortmund"
 ];
 
-const WHEEL_COLORS = [
-  "#e74c3c", "#3498db", "#2ecc71", "#f1c40f", 
-  "#9b59b6", "#e67e22", "#1abc9c", "#34495e"
-];
-
-// ==========================================
-// 2. GLOBALE ZUSTÄNDE & VARIANTE
-// ==========================================
+// 2. Zustand
 let players = [];
 let availableClubs = [...DEFAULT_CLUBS];
 let teams = [];
@@ -73,7 +62,7 @@ let koMatches = [];
 let myPlayerName = localStorage.getItem('fifa_my_player') || null;
 let pendingAdminLogin = false;
 
-// Interaktive Auslosung State
+// Interaktive Auslosung (Live-Synced)
 let draftState = {
   active: false,
   pairs: [],
@@ -87,12 +76,7 @@ let draftState = {
 };
 
 let animFrameId = null;
-let lastRenderedIndex = -1;
-let lastRenderedSpinning = false;
 
-// ==========================================
-// HELFER & AUTH PRÜFUNGEN
-// ==========================================
 function getPlayerObj(name) {
   if (!name) return null;
   return players.find(p => p.name.toLowerCase() === name.trim().toLowerCase());
@@ -116,9 +100,6 @@ function getMyTeam() {
   return teams.find(t => t.p1 === myPlayerName || t.p2 === myPlayerName);
 }
 
-// ==========================================
-// DOM CONTENT LOADED EVENT LISTENERS
-// ==========================================
 document.addEventListener('DOMContentLoaded', () => {
   const btnShowNew = document.getElementById('btn-show-new');
   if (btnShowNew) btnShowNew.addEventListener('click', showNewPlayerInput);
@@ -147,9 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// ==========================================
-// 3. ROLLEN & LOGIN LOGIK
-// ==========================================
+// 3. Rollen & Auth
 function enterAsSpectator() {
   document.getElementById('role-selection-modal').style.display = 'none';
   document.getElementById('app-header').style.display = 'flex';
@@ -313,9 +292,7 @@ function showTab(tabName) {
   if (tab) tab.classList.add('active');
 }
 
-// ==========================================
-// 4. ECHTZEIT-SYNCHRONISATION VIA FIREBASE
-// ==========================================
+// 4. Live-Sync via Firebase
 db.ref('tournament').on('value', (snapshot) => {
   const data = snapshot.val() || {};
   let rawPlayers = data.players || [];
@@ -336,9 +313,7 @@ function saveData() {
   db.ref('tournament').set({ players, availableClubs, teams, groups, groupMatches, koMatches, draftState });
 }
 
-// ==========================================
-// 5. PROFI-CLUBS VERWALTUNG
-// ==========================================
+// 5. Profi-Clubs Verwaltung
 function addClub() {
   const input = document.getElementById('new-club-name');
   const name = input ? input.value.trim() : '';
@@ -364,9 +339,7 @@ function resetClubsToDefault() {
   }
 }
 
-// ==========================================
-// 6. LIVE INTERAKTIVE AUSLOSUNG SHOW & GLÜCKSRAD
-// ==========================================
+// 6. LIVE INTERAKTIVE AUSLOSUNG SHOW
 function startInteractiveDraft() {
   if (!isAdmin()) return;
   if (players.length < 2 || players.length % 2 !== 0) {
@@ -421,25 +394,11 @@ function handleLiveDraftUI() {
   if (!draftState || !draftState.active) {
     modal.style.display = 'none';
     if (animFrameId) cancelAnimationFrame(animFrameId);
-    lastRenderedIndex = -1;
-    lastRenderedSpinning = false;
     return;
   }
 
   modal.style.display = 'flex';
-
-  // Verhindere das Zerstören des Canvas während einer laufenden Drehung
-  const needsReRender = (draftState.currentIndex !== lastRenderedIndex) || 
-                        (draftState.spinning !== lastRenderedSpinning) ||
-                        (!document.getElementById('wheel-canvas'));
-
-  if (needsReRender) {
-    lastRenderedIndex = draftState.currentIndex;
-    lastRenderedSpinning = draftState.spinning;
-    renderDraftStep();
-  }
-
-  startWheelAnimationLoop();
+  renderDraftStep();
 }
 
 function renderDraftStep() {
@@ -450,7 +409,7 @@ function renderDraftStep() {
     stage.innerHTML = `
       <h3 style="color:#4CAF50;">🎉 Alle Teams wurden gelost! 🎉</h3>
       <p>Die Teams und zugelosten Fußballmannschaften stehen fest!</p>
-      ${isAdmin() ? `<button class="btn-primary role-btn" onclick="finishDraft()">Fertigstellen & Teams speichern</button>` : '<p style="color:var(--fal-yellow, #f1c40f);">Warte auf Admin-Bestätigung...</p>'}
+      ${isAdmin() ? `<button class="btn-primary role-btn" onclick="finishDraft()">Fertigstellen & Teams speichern</button>` : '<p style="color:var(--fal-yellow);">Warte auf Admin-Bestätigung...</p>'}
     `;
     return;
   }
@@ -461,16 +420,16 @@ function renderDraftStep() {
     <p style="font-size:0.9em; opacity:0.8;">Team ${draftState.currentIndex + 1} von ${draftState.pairs.length}</p>
     
     <div style="background:rgba(0,0,0,0.3); padding:15px; border-radius:10px; margin: 15px 0;">
-      <h3 style="margin:0 0 10px 0; color:var(--fal-yellow, #f1c40f);">👥 Spieler-Duo:</h3>
+      <h3 style="margin:0 0 10px 0; color:var(--fal-yellow);">👥 Spieler-Duo:</h3>
       <h2 style="margin:0; font-size:1.4em;">${currentPair.p1} & ${currentPair.p2}</h2>
     </div>
 
-    <div class="wheel-container" style="position:relative; display:inline-block;">
-      <div class="wheel-pointer" style="position:absolute; top:-10px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:12px solid transparent; border-right:12px solid transparent; border-top:20px solid #e74c3c; z-index:10;"></div>
+    <div class="wheel-container">
+      <div class="wheel-pointer"></div>
       <canvas id="wheel-canvas" width="260" height="260"></canvas>
     </div>
 
-    <div id="spin-result" style="height: 35px; font-weight: bold; font-size: 1.2em; color: var(--fal-yellow, #f1c40f); margin-top:5px;">
+    <div id="spin-result" style="height: 35px; font-weight: bold; font-size: 1.2em; color: var(--fal-yellow); margin-top:5px;">
       ${draftState.lastDrawnClub ? `⚽ Gewählter Club: <u>${draftState.lastDrawnClub}</u>` : ''}
     </div>
 
@@ -512,102 +471,83 @@ function startWheelAnimationLoop() {
       const easeOut = 1 - Math.pow(1 - progress, 3);
       currentAngle = easeOut * draftState.targetAngle;
 
-      drawWheelCanvas(currentAngle);
-
       if (progress < 1) {
         animFrameId = requestAnimationFrame(update);
       } else {
-        drawWheelCanvas(draftState.targetAngle);
+        currentAngle = draftState.targetAngle;
       }
-    } else {
-      currentAngle = draftState.targetAngle || 0;
-      drawWheelCanvas(currentAngle);
+    } else if (draftState.lastDrawnClub) {
+      currentAngle = draftState.targetAngle;
     }
+
+    drawWheelCanvas(currentAngle);
   }
 
-  animFrameId = requestAnimationFrame(update);
+  update();
 }
 
-function drawWheelCanvas(angleInDegrees) {
+function drawWheelCanvas(angleOffset) {
   const canvas = document.getElementById('wheel-canvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  
-  const width = canvas.width;
-  const height = canvas.height;
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const radius = width / 2 - 10;
+  const numClubs = draftState.remainingClubs.length;
+  if (numClubs === 0) return;
 
-  const clubs = draftState.remainingClubs || AVAILABLE_CLUBS;
-  const numSegments = clubs.length;
-  if (numSegments === 0) return;
+  const sliceAngle = (2 * Math.PI) / numClubs;
+  ctx.clearRect(0, 0, 260, 260);
 
-  const arcSize = (2 * Math.PI) / numSegments;
+  const colors = ['#1e3e62', '#0b192c', '#132a4a', '#2a2a2a', '#10233d'];
 
-  ctx.clearRect(0, 0, width, height);
+  for (let i = 0; i < numClubs; i++) {
+    const startAngle = angleOffset + i * sliceAngle;
+    const endAngle = startAngle + sliceAngle;
 
-  ctx.save();
-  ctx.translate(centerX, centerY);
-  ctx.rotate((angleInDegrees - 90) * Math.PI / 180);
-
-  for (let i = 0; i < numSegments; i++) {
-    const angle = i * arcSize;
     ctx.beginPath();
-    ctx.fillStyle = WHEEL_COLORS[i % WHEEL_COLORS.length];
-    ctx.moveTo(0, 0);
-    ctx.arc(0, 0, radius, angle, angle + arcSize);
-    ctx.lineTo(0, 0);
+    ctx.moveTo(130, 130);
+    ctx.arc(130, 130, 130, startAngle, endAngle);
+    ctx.fillStyle = colors[i % colors.length];
     ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,200,0,0.3)';
     ctx.stroke();
 
     ctx.save();
+    ctx.translate(130, 130);
+    ctx.rotate(startAngle + sliceAngle / 2);
+    ctx.textAlign = "right";
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 11px sans-serif";
-    ctx.textAlign = "right";
-    ctx.rotate(angle + arcSize / 2);
-    ctx.fillText(clubs[i].substring(0, 14), radius - 12, 4);
+    ctx.fillText(draftState.remainingClubs[i].substring(0, 12), 120, 4);
     ctx.restore();
   }
-
-  ctx.restore();
-
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, 18, 0, 2 * Math.PI);
-  ctx.fillStyle = "#ffffff";
-  ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "#333333";
-  ctx.stroke();
 }
 
 function spinWheel() {
   if (!isAdmin() || draftState.spinning) return;
 
-  const clubs = draftState.remainingClubs;
-  if (!clubs || clubs.length === 0) return;
+  const targetIndex = Math.floor(Math.random() * draftState.remainingClubs.length);
+  const targetClub = draftState.remainingClubs[targetIndex];
 
-  const targetIndex = Math.floor(Math.random() * clubs.length);
-  const winningClub = clubs[targetIndex];
+  const numClubs = draftState.remainingClubs.length;
+  const sliceAngle = (2 * Math.PI) / numClubs;
 
-  const segmentAngle = 360 / clubs.length;
-  const fullRounds = (5 + Math.floor(Math.random() * 4)) * 360;
-  
-  const targetSegmentCenter = 360 - (targetIndex * segmentAngle + segmentAngle / 2);
-  const targetAngle = fullRounds + targetSegmentCenter;
+  const targetSegmentCenter = (targetIndex + 0.5) * sliceAngle;
+  const targetAngleAtTop = (1.5 * Math.PI) - targetSegmentCenter;
+  const totalRotation = (2 * Math.PI * 5) + targetAngleAtTop;
 
   draftState.spinning = true;
   draftState.startTime = Date.now();
-  draftState.targetAngle = targetAngle;
+  draftState.targetAngle = totalRotation;
   draftState.duration = 4000;
   draftState.lastDrawnClub = null;
   saveData();
 
+  // Nach Ablauf der 4 Sekunden speichern wir das Endergebnis (Club wird HIER noch NICHT gelöscht)
   setTimeout(() => {
     if (isAdmin() && draftState.spinning) {
       draftState.spinning = false;
-      draftState.lastDrawnClub = winningClub;
-      draftState.pairs[draftState.currentIndex].club = winningClub;
+      draftState.lastDrawnClub = targetClub;
+      draftState.pairs[draftState.currentIndex].club = targetClub;
       saveData();
     }
   }, 4100);
@@ -616,6 +556,7 @@ function spinWheel() {
 function nextDraftStep() {
   if (!isAdmin()) return;
 
+  // HIER löschen wir den Club erst sauber heraus, wenn es weitergeht!
   if (draftState.lastDrawnClub) {
     const idx = draftState.remainingClubs.indexOf(draftState.lastDrawnClub);
     if (idx !== -1) {
@@ -639,9 +580,7 @@ function finishDraft() {
   showTab('teams');
 }
 
-// ==========================================
-// 7. SPIELER & ADMIN AKTIONEN
-// ==========================================
+// 7. Standard Admin Handlungen
 function addPlayer() {
   const input = document.getElementById('new-player-name');
   const name = input ? input.value.trim() : '';
@@ -683,9 +622,7 @@ function removePlayerPassword(index) {
   }
 }
 
-// ==========================================
-// 8. GRUPPEN & KO-PHASE LOGIK
-// ==========================================
+// 8. Gruppen & KO-Phase Logik
 function drawGroups() {
   if (!isAdmin()) return;
   if (teams.length < 4) return alert('Du benötigst mindestens 4 Teams für Gruppen!');
@@ -958,9 +895,7 @@ function resetTournament() {
   }
 }
 
-// ==========================================
-// 9. MATCH & TEAM UPDATES
-// ==========================================
+// 9. Match & Team Updates
 function updateTeamName(teamId, newName) {
   const team = teams.find(t => t.id === teamId);
   if (!team) return;
@@ -1015,9 +950,7 @@ function updateMatchScore(matchId, isKO, score1Val, score2Val) {
   saveData();
 }
 
-// ==========================================
-// 10. RENDER LOGIK & UI-STEUERUNG
-// ==========================================
+// 10. Render Panel & UI
 function renderAll() {
   renderTeams();
   renderGroups();
@@ -1048,59 +981,42 @@ function renderTeams() {
                  style="font-weight: bold; font-size: 1.1em; max-width: 180px;">
           ${clubBadgeHtml}
         </div>
-        ${isMyTeam ? '<div style="color:var(--fal-yellow, #f1c40f); font-size:0.85em; font-weight:bold; margin-top:4px;">⭐ (Dein Team)</div>' : ''}
-        <p style="margin-top: 8px; margin-bottom: 0;"><strong>Spieler:</strong> ${t.p1} & ${t.p2}</p>
+        ${isMyTeam ? '<div style="color:var(--fal-yellow); font-size:0.85em; font-weight:bold; margin-top:4px;">⭐ (Dein Team)</div>' : ''}
+        <p style="margin-top: 8px; margin-bottom:0;">Mitglieder: <strong>${t.p1}</strong> & <strong>${t.p2}</strong></p>
       </div>
     `;
   }).join('');
 }
 
 function calculateGroupStandings() {
-  return groups.map(group => {
-    const teamStats = {};
-    group.teams.forEach(teamId => {
-      const tObj = teams.find(t => t.id === teamId);
-      teamStats[teamId] = {
-        teamId: teamId,
-        name: tObj ? tObj.name : `Team ${teamId}`,
-        p1: tObj ? tObj.p1 : '',
-        p2: tObj ? tObj.p2 : '',
-        club: tObj ? tObj.club : '',
-        played: 0, won: 0, drawn: 0, lost: 0,
-        gf: 0, ga: 0, diff: 0, points: 0
-      };
+  return groups.map(g => {
+    const stats = {};
+    g.teams.forEach(tId => {
+      const teamObj = teams.find(t => t.id === tId);
+      let displayName = teamObj ? teamObj.name : `Team ${tId}`;
+      if (teamObj && teamObj.club) displayName += ` (${teamObj.club})`;
+      stats[tId] = { teamId: tId, name: displayName, played: 0, gf: 0, ga: 0, diff: 0, points: 0 };
     });
 
-    groupMatches.filter(m => m.group === group.letter && m.played).forEach(m => {
-      const t1 = teamStats[m.t1Id];
-      const t2 = teamStats[m.t2Id];
+    groupMatches.filter(m => m.group === g.letter && m.played).forEach(m => {
+      const t1 = stats[m.t1Id];
+      const t2 = stats[m.t2Id];
       if (t1 && t2) {
         t1.played++; t2.played++;
         t1.gf += m.score1; t1.ga += m.score2;
         t2.gf += m.score2; t2.ga += m.score1;
 
-        if (m.score1 > m.score2) {
-          t1.won++; t1.points += 3; t2.lost++;
-        } else if (m.score2 > m.score1) {
-          t2.won++; t2.points += 3; t1.lost++;
-        } else {
-          t1.drawn++; t2.drawn++;
-          t1.points += 1; t2.points += 1;
-        }
+        if (m.score1 > m.score2) t1.points += 3;
+        else if (m.score2 > m.score1) t2.points += 3;
+        else { t1.points += 1; t2.points += 1; }
+
+        t1.diff = t1.gf - t1.ga;
+        t2.diff = t2.gf - t2.ga;
       }
     });
 
-    Object.values(teamStats).forEach(s => {
-      s.diff = s.gf - s.ga;
-    });
-
-    const sorted = Object.values(teamStats).sort((a, b) => {
-      if (b.points !== a.points) return b.points - a.points;
-      if (b.diff !== a.diff) return b.diff - a.diff;
-      return b.gf - a.gf;
-    });
-
-    return { letter: group.letter, rankings: sorted };
+    const rankings = Object.values(stats).sort((a, b) => b.points - a.points || b.diff - a.diff || b.gf - a.gf);
+    return { letter: g.letter, rankings };
   });
 }
 
@@ -1109,48 +1025,38 @@ function renderGroups() {
   if (!container) return;
 
   if (groups.length === 0) {
-    container.innerHTML = '<p class="empty-state">Noch keine Gruppen ausgelost.</p>';
+    container.innerHTML = '<p class="empty-state">Noch keine Gruppen gelost.</p>';
     return;
   }
 
   const standings = calculateGroupStandings();
 
   container.innerHTML = standings.map(g => `
-    <div class="admin-card" style="margin-bottom: 20px;">
-      <h3 style="color: var(--fal-yellow, #f1c40f); margin-top: 0;">${g.letter}</h3>
-      <div style="overflow-x: auto;">
-        <table class="table-standings">
+    <div class="admin-card">
+      <h3 style="color:var(--fal-yellow); margin-top:0;">${g.letter}</h3>
+      <div class="table-container">
+        <table>
           <thead>
             <tr>
               <th>#</th>
               <th>Team</th>
               <th>Sp</th>
-              <th>S</th>
-              <th>U</th>
-              <th>N</th>
               <th>Tore</th>
               <th>Diff</th>
               <th>Pkt</th>
             </tr>
           </thead>
           <tbody>
-            ${g.rankings.map((t, idx) => {
-              const myTeam = getMyTeam();
-              const isMyTeam = myTeam && myTeam.id === t.teamId;
-              return `
-                <tr class="${isMyTeam ? 'highlight-me-row' : ''}">
-                  <td><strong>${idx + 1}</strong></td>
-                  <td>${t.name} <small>(${t.p1} & ${t.p2})</small> ${t.club ? `⚽ <em>${t.club}</em>` : ''}</td>
-                  <td>${t.played}</td>
-                  <td>${t.won}</td>
-                  <td>${t.drawn}</td>
-                  <td>${t.lost}</td>
-                  <td>${t.gf}:${t.ga}</td>
-                  <td>${t.diff > 0 ? '+' + t.diff : t.diff}</td>
-                  <td><strong>${t.points}</strong></td>
-                </tr>
-              `;
-            }).join('')}
+            ${g.rankings.map((r, idx) => `
+              <tr>
+                <td>${idx + 1}</td>
+                <td><strong>${r.name}</strong></td>
+                <td>${r.played}</td>
+                <td>${r.gf}:${r.ga}</td>
+                <td>${r.diff > 0 ? '+' + r.diff : r.diff}</td>
+                <td><strong>${r.points}</strong></td>
+              </tr>
+            `).join('')}
           </tbody>
         </table>
       </div>
@@ -1159,153 +1065,135 @@ function renderGroups() {
 }
 
 function renderMatches() {
-  const container = document.getElementById('matches-container');
-  if (!container) return;
+  const gList = document.getElementById('group-matches-list');
+  const kList = document.getElementById('ko-matches-list');
+  const myTeam = getMyTeam();
 
-  if (groupMatches.length === 0 && koMatches.length === 0) {
-    container.innerHTML = '<p class="empty-state">Noch keine Spiele vorhanden.</p>';
-    return;
+  if (gList) {
+    if (groupMatches.length === 0) {
+      gList.innerHTML = '<p class="empty-state">Noch keine Gruppenspiele generiert.</p>';
+    } else {
+      gList.innerHTML = groupMatches.map(m => renderMatchCard(m, false, myTeam)).join('');
+    }
   }
 
-  let html = '';
+  if (kList) {
+    if (koMatches.length === 0) {
+      kList.innerHTML = '<p class="empty-state">KO-Phase wurde noch nicht gelost.</p>';
+    } else {
+      let html = '';
 
-  if (groupMatches.length > 0) {
-    html += `<h2 style="color:var(--fal-yellow, #f1c40f); margin-top: 0;">🏟️ Gruppenspiele</h2>`;
+      const finalMatch = koMatches.find(m => m.round === '🏆 FINALE');
+      if (finalMatch && finalMatch.played) {
+        const winnerId = finalMatch.score1 > finalMatch.score2 ? finalMatch.t1Id : finalMatch.t2Id;
+        const winnerTeam = teams.find(t => t.id === winnerId);
+        if (winnerTeam) {
+          html += `
+            <div class="admin-card highlight-me" style="text-align: center; margin-bottom: 25px; background: linear-gradient(135deg, #132A4A, #1A3E66);">
+              <h2 style="color: var(--fal-yellow); margin: 0 0 10px 0;">🏆 TURNIERSIEGER 🏆</h2>
+              <h3 style="font-size: 1.5em; margin: 0; color: white;">${winnerTeam.p1} & ${winnerTeam.p2}</h3>
+              <p style="margin: 5px 0 0 0; color: var(--fal-yellow); font-weight: bold;">(${winnerTeam.name} - ${winnerTeam.club || ''})</p>
+            </div>
+          `;
+        }
+      }
 
-    const slots = [...new Set(groupMatches.map(m => m.slot))].sort((a, b) => a - b);
+      const isTwoGroupMode = groups.length === 2;
+      const qfMatches = koMatches.filter(m => m.round === 'Viertelfinale');
+      const qfFinished = qfMatches.length === 4 && qfMatches.every(m => m.played);
+      const hasHF = koMatches.some(m => m.round.includes('Halbfinale'));
 
-    slots.forEach(slot => {
-      const matchesInSlot = groupMatches.filter(m => m.slot === slot);
-      html += `
-        <div style="margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-          <h4 style="margin: 0 0 10px 0; opacity: 0.8;">Zeitfenster / Runde ${slot}</h4>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px;">
-            ${matchesInSlot.map(m => renderMatchCard(m, false)).join('')}
-          </div>
-        </div>
-      `;
-    });
+      const hfMatches = koMatches.filter(m => m.round.includes('Halbfinale'));
+      const hfFinished = hfMatches.length === 2 && hfMatches.every(m => m.played);
+      const hasFinal = koMatches.some(m => m.round.includes('FINALE'));
+
+      if (isAdmin()) {
+        if (isTwoGroupMode && !hasHF) {
+          html += `<button class="btn-primary" style="margin-bottom: 20px;" onclick="drawSemifinals()">🎲 Halbfinale Über-Kreuz auslosen!</button>`;
+        } else if (!isTwoGroupMode && qfFinished && !hasHF) {
+          html += `<button class="btn-primary" style="margin-bottom: 20px;" onclick="drawSemifinals()">🎲 Halbfinale jetzt auslosen!</button>`;
+        }
+        
+        if (hfFinished && !hasFinal) {
+          html += `<button class="btn-primary" style="margin-bottom: 20px;" onclick="drawFinals()">🏆 Finale & Spiel um Platz 3 anlegen!</button>`;
+        }
+      }
+
+      html += koMatches.map(m => renderMatchCard(m, true, myTeam)).join('');
+      kList.innerHTML = html;
+    }
   }
-
-  if (koMatches.length > 0) {
-    html += `<h2 style="color:var(--fal-yellow, #f1c40f); margin-top: 25px;">🏆 KO-Phase</h2>`;
-    html += `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px;">`;
-    html += koMatches.map(m => renderMatchCard(m, true)).join('');
-    html += `</div>`;
-  }
-
-  container.innerHTML = html;
 }
 
-function renderMatchCard(match, isKO) {
-  const t1 = teams.find(t => t.id === match.t1Id);
-  const t2 = teams.find(t => t.id === match.t2Id);
-  const myTeam = getMyTeam();
-  const isMyMatch = myTeam && (match.t1Id === myTeam.id || match.t2Id === myTeam.id);
-  const canEdit = canManageMatches() || isMyMatch;
+function renderMatchCard(m, isKO, myTeam) {
+  const t1 = teams.find(t => t.id === m.t1Id);
+  const t2 = teams.find(t => t.id === m.t2Id);
+  const canEdit = canManageMatches() || (myTeam && (m.t1Id === myTeam.id || m.t2Id === myTeam.id));
+  const courtClass = m.court === 'Hauptplatz' ? 'court-main' : 'court-side';
+  const roundTitle = m.round ? `${m.round}` : `Runde ${m.slot} • ${m.group}`;
+  const isFinal = m.round === '🏆 FINALE';
 
-  const t1Name = t1 ? t1.name : 'TBD';
-  const t2Name = t2 ? t2.name : 'TBD';
-
-  const val1 = match.score1 !== null ? match.score1 : '';
-  const val2 = match.score2 !== null ? match.score2 : '';
+  const t1Label = t1 ? `${t1.name} ${t1.club ? '(' + t1.club + ')' : ''}` : 'Team 1';
+  const t2Label = t2 ? `${t2.name} ${t2.club ? '(' + t2.club + ')' : ''}` : 'Team 2';
 
   return `
-    <div class="admin-card ${isMyMatch ? 'highlight-me' : ''}" style="border-left: 4px solid ${match.court === 'Hauptplatz' ? '#FFD700' : '#4FC3F7'};">
-      <div style="display: flex; justify-content: space-between; font-size: 0.8em; opacity: 0.8; margin-bottom: 6px;">
-        <span>${isKO ? match.round : match.group}</span>
-        <span>📍 ${match.court}</span>
+    <div class="match-card ${isFinal ? 'highlight-me' : ''}">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size: 0.85em; font-weight: bold; color: var(--fal-yellow);">${roundTitle}</span>
+        <span class="court-badge ${courtClass}">${m.court}</span>
       </div>
-      <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
-        <span style="flex: 1; text-align: right; font-weight: bold; ${myTeam && t1 && t1.id === myTeam.id ? 'color: var(--fal-yellow, #f1c40f);' : ''}">
-          ${t1Name}
-        </span>
-        <div style="display: flex; align-items: center; gap: 4px;">
-          <input type="number" min="0" max="99" value="${val1}" 
-                 ${canEdit ? '' : 'disabled'}
-                 onchange="updateMatchScore(${match.id}, ${isKO}, this.value, this.parentNode.querySelector('.score-2').value)"
-                 class="score-1" style="width: 40px; text-align: center; padding: 4px; font-weight: bold;">
-          <span>:</span>
-          <input type="number" min="0" max="99" value="${val2}" 
-                 ${canEdit ? '' : 'disabled'}
-                 onchange="updateMatchScore(${match.id}, ${isKO}, this.parentNode.querySelector('.score-1').value, this.value)"
-                 class="score-2" style="width: 40px; text-align: center; padding: 4px; font-weight: bold;">
-        </div>
-        <span style="flex: 1; text-align: left; font-weight: bold; ${myTeam && t2 && t2.id === myTeam.id ? 'color: var(--fal-yellow, #f1c40f);' : ''}">
-          ${t2Name}
-        </span>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin: 10px 0;">
+        <span style="font-size: 0.95em;"><strong>${t1Label}</strong> <br><small style="opacity:0.7;">vs</small><br> <strong>${t2Label}</strong></span>
       </div>
-      ${match.played ? `<div style="text-align: center; font-size: 0.75em; color: #4CAF50; margin-top: 4px;">✔ Beendet</div>` : ''}
+      <div style="display:flex; gap: 8px; align-items:center;">
+        <input type="number" min="0" value="${m.score1 !== null ? m.score1 : ''}" 
+               ${canEdit ? '' : 'disabled'} id="score1-${m.id}" placeholder="-" style="width: 60px;">
+        <span>:</span>
+        <input type="number" min="0" value="${m.score2 !== null ? m.score2 : ''}" 
+               ${canEdit ? '' : 'disabled'} id="score2-${m.id}" placeholder="-" style="width: 60px;">
+        ${canEdit ? `<button class="btn-primary btn-sm" onclick="updateMatchScore(${m.id}, ${isKO}, document.getElementById('score1-${m.id}').value, document.getElementById('score2-${m.id}').value)">Speichern</button>` : ''}
+      </div>
     </div>
   `;
 }
 
 function renderAdminPanel() {
-  const container = document.getElementById('admin-container');
-  if (!container) return;
+  const playerListEl = document.getElementById('admin-player-list');
+  const clubListEl = document.getElementById('admin-club-list');
 
-  if (!isAdmin()) {
-    container.innerHTML = '<p class="empty-state">🔒 Nur für den Admin (Tim) zugänglich.</p>';
-    return;
+  if (playerListEl) {
+    playerListEl.innerHTML = players.map((p, index) => {
+      const hasPW = !!p.password;
+      const isRefBtnClass = p.isRef ? 'btn-primary' : 'btn-secondary';
+
+      return `
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; background: var(--fal-blue-primary); padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; gap: 8px;">
+          <div>
+            <strong>${index + 1}. ${p.name}</strong> 
+            ${p.isRef ? '<span style="color:var(--fal-yellow); font-size:0.85em;">[🟨 Ref]</span>' : ''}
+            ${hasPW ? '<span style="font-size:0.85em; opacity:0.8;">[🔒 PW]</span>' : ''}
+          </div>
+
+          <div style="display:flex; gap: 5px; flex-wrap:wrap;">
+            <button class="${isRefBtnClass} btn-sm" onclick="toggleRef(${index})">
+              ${p.isRef ? '🟨 Ref (Aktiv)' : 'Ref vergeben'}
+            </button>
+            ${hasPW 
+              ? `<button class="btn-danger btn-sm" onclick="removePlayerPassword(${index})">PW löschen</button>`
+              : `<button class="btn-secondary btn-sm" onclick="setPlayerPassword(${index})">+ PW</button>`
+            }
+            <button class="btn-danger btn-sm" onclick="removePlayer(${index})">🗑️</button>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 
-  container.innerHTML = `
-    <div class="admin-card">
-      <h3>👥 Spielerverwaltung (${players.length})</h3>
-      <div style="display: flex; gap: 8px; margin-bottom: 15px;">
-        <input type="text" id="new-player-name" placeholder="Neuer Spieler Name..." style="flex: 1;">
-        <button class="btn-primary" onclick="addPlayer()">Hinzufügen</button>
-      </div>
-      <ul style="list-style: none; padding: 0; margin: 0;">
-        ${players.map((p, idx) => `
-          <li style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
-            <span>
-              <strong>${p.name}</strong> 
-              ${p.isRef ? '🟨 (Schiedsrichter)' : ''} 
-              ${p.password ? '🔒' : ''}
-            </span>
-            <div style="display: flex; gap: 4px;">
-              <button class="btn-secondary" style="padding: 2px 6px; font-size: 0.8em;" onclick="toggleRef(${idx})">
-                ${p.isRef ? 'Ref-Rechte entziehen' : 'Als Ref setzen'}
-              </button>
-              <button class="btn-secondary" style="padding: 2px 6px; font-size: 0.8em;" onclick="setPlayerPassword(${idx})">
-                PW ${p.password ? 'ändern' : 'setzen'}
-              </button>
-              ${p.password ? `<button class="btn-secondary" style="padding: 2px 6px; font-size: 0.8em; color: #ff6b6b;" onclick="removePlayerPassword(${idx})">PW löschen</button>` : ''}
-              <button class="btn-secondary" style="padding: 2px 6px; font-size: 0.8em; color: #ff6b6b;" onclick="removePlayer(${idx})">❌</button>
-            </div>
-          </li>
-        `).join('')}
-      </ul>
-    </div>
-
-    <div class="admin-card" style="margin-top: 20px;">
-      <h3>⚽ Profi-Clubs (${availableClubs.length})</h3>
-      <div style="display: flex; gap: 8px; margin-bottom: 15px;">
-        <input type="text" id="new-club-name" placeholder="Neuer Profi-Club..." style="flex: 1;">
-        <button class="btn-primary" onclick="addClub()">Hinzufügen</button>
-        <button class="btn-secondary" onclick="resetClubsToDefault()">Standard-Reset</button>
-      </div>
-      <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-        ${availableClubs.map((club, idx) => `
-          <span style="background: rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 4px; font-size: 0.9em; display: inline-flex; align-items: center; gap: 6px;">
-            ${club}
-            <span style="cursor: pointer; color: #ff6b6b;" onclick="removeClub(${idx})">×</span>
-          </span>
-        `).join('')}
-      </div>
-    </div>
-
-    <div class="admin-card" style="margin-top: 20px;">
-      <h3>⚙️ Turnier-Steuerung</h3>
-      <div style="display: flex; flex-direction: column; gap: 10px;">
-        <button class="btn-primary" onclick="startInteractiveDraft()">🎰 LIVE-Auslosung (Draft) starten</button>
-        <button class="btn-secondary" onclick="drawGroups()">📊 Gruppen & Spielplan auslosen</button>
-        <button class="btn-secondary" onclick="drawKOPhase()">⚔️ Viertelfinale auslosen (4 Gruppen)</button>
-        <button class="btn-secondary" onclick="drawSemifinals()">🔥 Halbfinale auslosen / anlegen</button>
-        <button class="btn-secondary" onclick="drawFinals()">🏆 Finale & Spiel um Platz 3 anlegen</button>
-        <button class="btn-secondary" style="background: #a72626; color: white; margin-top: 10px;" onclick="resetTournament()">🚨 Turnier komplett zurücksetzen</button>
-      </div>
-    </div>
-  `;
+  if (clubListEl) {
+    clubListEl.innerHTML = availableClubs.map((club, index) => `
+      <span class="club-badge">
+        ${club} <span style="cursor:pointer; color:#ff4d4d; font-weight:bold; margin-left:4px;" onclick="removeClub(${index})">×</span>
+      </span>
+    `).join('');
+  }
 }
