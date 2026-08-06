@@ -45,8 +45,8 @@ const ADMIN_PASSWORD = "1234";
 
 const DEFAULT_CLUBS = [
   "Real Madrid", "FC Bayern", "Manchester City", "Arsenal", 
-  "FC Barcelona", "PSG", "Inter Mailand", "Bayer Leverkusen",
-  "FC Liverpool", "Juventus", "Atletico Madrid", "Borussia Dortmund"
+  "FC Barcelona", "PSG", "Inter Mailand", "Leverkusen",
+  "FC Liverpool", "Juventus", "Atletico", "BVB"
 ];
 
 // 2. Zustand
