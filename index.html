@@ -49,10 +49,17 @@
 
   <!-- INTERAKTIVE AUSLOSUNG SHOW-MODAL (GLÜCKSRAD) -->
   <div id="draft-modal" class="modal-overlay" style="display: none;">
-    <div class="modal-content" style="max-width: 500px; padding: 25px;">
+    <div class="modal-content" style="max-width: 500px; padding: 25px; text-align: center;">
       <h2 style="color: var(--fal-yellow); margin-top:0;">🎰 LIVE-AUSLOSUNG</h2>
+      
+      <!-- Container für das Rad (inklusive Zeiger) -->
+      <div id="wheel-wrapper" style="position: relative; width: 300px; height: 300px; margin: 0 auto 15px auto; display: none;">
+        <div id="wheel-pointer" style="position: absolute; top: -10px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 24px solid #ff0000; z-index: 10;"></div>
+        <canvas id="wheel-canvas" width="300" height="300"></canvas>
+      </div>
+
       <div id="draft-stage">
-        <!-- Dynamischer Inhalt für die Schritte -->
+        <!-- Dynamischer Inhalt für die Schritte (2er-Teams & Profi-Clubs) -->
       </div>
     </div>
   </div>
@@ -134,6 +141,10 @@
       </div>
     </section>
   </main>
+
+  <!-- AUDIO FÜR SOUND-EFFEKTE (Web Audio Synthesizer Fallback ist im Skript hinterlegt) -->
+  <audio id="sound-tick" src="https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3" preload="auto"></audio>
+  <audio id="sound-fanfare" src="https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3" preload="auto"></audio>
 
   <script src="script.js"></script>
 </body>
