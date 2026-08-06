@@ -566,7 +566,7 @@ function spinWheel() {
   draftState.spinning = true;
   draftState.startTime = Date.now();
   draftState.targetAngle = totalRotation;
-  draftState.duration = 1000;
+  draftState.duration = 4000;
   draftState.lastDrawnClub = null;
   saveData();
 
