@@ -24,6 +24,9 @@ window.addClub = addClub;
 window.removeClub = removeClub;
 window.resetClubsToDefault = resetClubsToDefault;
 window.startInteractiveDraft = startInteractiveDraft;
+window.spinWheel = spinWheel;
+window.nextDraftStep = nextDraftStep;
+window.finishDraft = finishDraft;
 
 // 1. Firebase Konfiguration
 const firebaseConfig = {
@@ -44,9 +47,9 @@ const db = firebase.database();
 const ADMIN_PASSWORD = "1234";
 
 const DEFAULT_CLUBS = [
-  "Real Madrid", "FC Bayern", "ManCity", "Arsenal", 
-  "FC Barcelona", "PSG", "Inter Mailand", "Leverkusen",
-  "FC Liverpool", "Juventus", "Atletico", "BVB"
+  "Real Madrid", "FC Bayern", "Manchester City", "Arsenal", 
+  "FC Barcelona", "PSG", "Inter Mailand", "Bayer Leverkusen",
+  "FC Liverpool", "Juventus", "Atletico Madrid", "Borussia Dortmund"
 ];
 
 // 2. Zustand
@@ -59,10 +62,16 @@ let koMatches = [];
 let myPlayerName = localStorage.getItem('fifa_my_player') || null;
 let pendingAdminLogin = false;
 
-// Interaktive Auslosungs-Variablen
-let draftPairs = [];
-let draftCurrentIndex = 0;
-let remainingClubsForDraft = []; // Pool für verbleibende Teams auf dem Rad
+// Interaktive Auslosung (Live-Synced)
+let draftState = {
+  active: false,
+  pairs: [],
+  currentIndex: 0,
+  remainingClubs: [],
+  spinning: false,
+  spinAngle: 0,
+  lastDrawnClub: null
+};
 
 function getPlayerObj(name) {
   if (!name) return null;
@@ -279,7 +288,7 @@ function showTab(tabName) {
   if (tab) tab.classList.add('active');
 }
 
-// 4. Live-Sync
+// 4. Live-Sync via Firebase
 db.ref('tournament').on('value', (snapshot) => {
   const data = snapshot.val() || {};
   let rawPlayers = data.players || [];
@@ -290,12 +299,14 @@ db.ref('tournament').on('value', (snapshot) => {
   groups = data.groups || [];
   groupMatches = data.groupMatches || [];
   koMatches = data.koMatches || [];
+  draftState = data.draftState || { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, spinAngle: 0, lastDrawnClub: null };
 
   renderAll();
+  handleLiveDraftUI();
 });
 
 function saveData() {
-  db.ref('tournament').set({ players, availableClubs, teams, groups, groupMatches, koMatches });
+  db.ref('tournament').set({ players, availableClubs, teams, groups, groupMatches, koMatches, draftState });
 }
 
 // 5. Profi-Clubs Verwaltung
@@ -324,7 +335,7 @@ function resetClubsToDefault() {
   }
 }
 
-// 6. INTERAKTIVE AUSLOSUNG & SPINNER WHEEL SHOW
+// 6. LIVE INTERAKTIVE AUSLOSUNG SHOW
 function startInteractiveDraft() {
   if (!isAdmin()) return;
   if (players.length < 2 || players.length % 2 !== 0) {
@@ -334,58 +345,72 @@ function startInteractiveDraft() {
     return alert(`Du hast zu wenige Profi-Clubs in der Liste! Mindestens ${players.length / 2} benötigt.`);
   }
 
-  if (confirm('Soll die Auslosungs-Show jetzt gestartet werden?')) {
+  if (confirm('Soll die Auslosungs-Show jetzt LIVE gestartet werden?')) {
     const shuffledPlayers = [...players.map(p => p.name)].sort(() => Math.random() - 0.5);
-    
-    // Kopie der Clubs für die Auslosung erstellen
-    remainingClubsForDraft = [...availableClubs].sort(() => Math.random() - 0.5);
+    const shuffledClubs = [...availableClubs].sort(() => Math.random() - 0.5);
 
-    draftPairs = [];
+    let pairs = [];
     let idCounter = 1;
     for (let i = 0; i < shuffledPlayers.length; i += 2) {
-      draftPairs.push({
+      pairs.push({
         id: idCounter,
         name: `Team ${idCounter}`,
         p1: shuffledPlayers[i],
         p2: shuffledPlayers[i + 1],
-        club: null // Wird live durchs Rad ermittelt
+        club: null
       });
       idCounter++;
     }
 
-    draftCurrentIndex = 0;
     teams = [];
     groups = [];
     groupMatches = [];
     koMatches = [];
 
-    document.getElementById('draft-modal').style.display = 'flex';
-    renderDraftStep();
+    draftState = {
+      active: true,
+      pairs: pairs,
+      currentIndex: 0,
+      remainingClubs: shuffledClubs,
+      spinning: false,
+      spinAngle: 0,
+      lastDrawnClub: null
+    };
+
+    saveData();
   }
+}
+
+function handleLiveDraftUI() {
+  const modal = document.getElementById('draft-modal');
+  if (!modal) return;
+
+  if (!draftState || !draftState.active) {
+    modal.style.display = 'none';
+    return;
+  }
+
+  modal.style.display = 'flex';
+  renderDraftStep();
 }
 
 function renderDraftStep() {
   const stage = document.getElementById('draft-stage');
   if (!stage) return;
 
-  if (draftCurrentIndex >= draftPairs.length) {
-    // Auslosung beendet!
-    teams = [...draftPairs];
-    saveData();
+  if (draftState.currentIndex >= draftState.pairs.length) {
     stage.innerHTML = `
       <h3 style="color:#4CAF50;">🎉 Alle Teams wurden gelost! 🎉</h3>
       <p>Die Teams und zugelosten Fußballmannschaften stehen fest!</p>
-      <button class="btn-primary role-btn" onclick="document.getElementById('draft-modal').style.display='none'; showTab('teams');">
-        Fertigstellen & Teams anzeigen
-      </button>
+      ${isAdmin() ? `<button class="btn-primary role-btn" onclick="finishDraft()">Fertigstellen & Teams speichern</button>` : '<p style="color:var(--fal-yellow);">Warte auf Admin-Bestätigung...</p>'}
     `;
     return;
   }
 
-  const currentPair = draftPairs[draftCurrentIndex];
+  const currentPair = draftState.pairs[draftState.currentIndex];
 
   stage.innerHTML = `
-    <p style="font-size:0.9em; opacity:0.8;">Team ${draftCurrentIndex + 1} von ${draftPairs.length}</p>
+    <p style="font-size:0.9em; opacity:0.8;">Team ${draftState.currentIndex + 1} von ${draftState.pairs.length}</p>
     
     <div style="background:rgba(0,0,0,0.3); padding:15px; border-radius:10px; margin: 15px 0;">
       <h3 style="margin:0 0 10px 0; color:var(--fal-yellow);">👥 Spieler-Duo:</h3>
@@ -397,23 +422,40 @@ function renderDraftStep() {
       <canvas id="wheel-canvas" width="260" height="260"></canvas>
     </div>
 
-    <div id="spin-result" style="height: 35px; font-weight: bold; font-size: 1.2em; color: var(--fal-yellow); margin-top:5px;"></div>
+    <div id="spin-result" style="height: 35px; font-weight: bold; font-size: 1.2em; color: var(--fal-yellow); margin-top:5px;">
+      ${draftState.lastDrawnClub ? `⚽ Gewählter Club: <u>${draftState.lastDrawnClub}</u>` : ''}
+    </div>
 
-    <button class="btn-primary role-btn" id="btn-spin-wheel" style="margin-top:10px;" onclick="spinWheel()">
-      🎰 Rad drehen
-    </button>
+    ${isAdmin() ? `
+      ${!draftState.spinning && !draftState.lastDrawnClub ? `
+        <button class="btn-primary role-btn" id="btn-spin-wheel" style="margin-top:10px;" onclick="spinWheel()">
+          🎰 Rad drehen
+        </button>
+      ` : ''}
+
+      ${!draftState.spinning && draftState.lastDrawnClub ? `
+        <button class="btn-primary role-btn" style="margin-top:15px;" onclick="nextDraftStep()">
+          ${draftState.currentIndex + 1 < draftState.pairs.length ? 'Weiter zum nächsten Team ➡️' : 'Auslosung abschließen 🎉'}
+        </button>
+      ` : ''}
+    ` : `
+      <p style="font-size:0.9em; opacity:0.8; margin-top:10px;">
+        ${draftState.spinning ? '🎰 Das Rad dreht sich live...' : (draftState.lastDrawnClub ? 'Warte auf nächstes Team...' : 'Der Admin dreht gleich am Rad!')}
+      </p>
+    `}
   `;
 
-  drawWheelCanvas(0);
+  drawWheelCanvas(draftState.spinAngle || 0);
 }
 
 function drawWheelCanvas(angleOffset) {
   const canvas = document.getElementById('wheel-canvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  const numClubs = remainingClubsForDraft.length;
-  const sliceAngle = (2 * Math.PI) / numClubs;
+  const numClubs = draftState.remainingClubs.length;
+  if (numClubs === 0) return;
 
+  const sliceAngle = (2 * Math.PI) / numClubs;
   ctx.clearRect(0, 0, 260, 260);
 
   const colors = ['#1e3e62', '#0b192c', '#132a4a', '#2a2a2a', '#10233d'];
@@ -431,80 +473,75 @@ function drawWheelCanvas(angleOffset) {
     ctx.strokeStyle = 'rgba(255,200,0,0.3)';
     ctx.stroke();
 
-    // Text auf Glücksrad zeichnen
     ctx.save();
     ctx.translate(130, 130);
     ctx.rotate(startAngle + sliceAngle / 2);
     ctx.textAlign = "right";
     ctx.fillStyle = "#ffffff";
     ctx.font = "bold 11px sans-serif";
-    ctx.fillText(remainingClubsForDraft[i].substring(0, 12), 120, 4);
+    ctx.fillText(draftState.remainingClubs[i].substring(0, 12), 120, 4);
     ctx.restore();
   }
 }
 
 function spinWheel() {
-  const spinBtn = document.getElementById('btn-spin-wheel');
-  if (spinBtn) spinBtn.disabled = true;
+  if (!isAdmin() || draftState.spinning) return;
 
-  // Zufällig ein Team aus den NOCH VERBLEIBENDEN Teams wählen
-  const targetIndex = Math.floor(Math.random() * remainingClubsForDraft.length);
-  const targetClub = remainingClubsForDraft[targetIndex];
+  const targetIndex = Math.floor(Math.random() * draftState.remainingClubs.length);
+  const targetClub = draftState.remainingClubs[targetIndex];
 
-  const currentPair = draftPairs[draftCurrentIndex];
-  currentPair.club = targetClub; // Dem Team zuweisen
-
-  const numClubs = remainingClubsForDraft.length;
+  const numClubs = draftState.remainingClubs.length;
   const sliceAngle = (2 * Math.PI) / numClubs;
 
-  // Exakte Position für den oberen Zeiger (12 Uhr / 1.5 * Math.PI)
   const targetSegmentCenter = (targetIndex + 0.5) * sliceAngle;
   const targetAngleAtTop = (1.5 * Math.PI) - targetSegmentCenter;
-  const totalRotation = (2 * Math.PI * 5) + targetAngleAtTop; // 5 volle Umdrehungen + Ziel
+  const totalRotation = (2 * Math.PI * 5) + targetAngleAtTop;
+
+  draftState.spinning = true;
+  draftState.lastDrawnClub = null;
+  saveData();
 
   let start = null;
-  const duration = 4000; // 4 Sekunden Animation
+  const duration = 4000;
 
   function animate(timestamp) {
     if (!start) start = timestamp;
     const progress = Math.min((timestamp - start) / duration, 1);
     
-    // Smooth Ease-Out Kurve
     const easeOut = 1 - Math.pow(1 - progress, 3);
     const currentAngle = easeOut * totalRotation;
 
-    drawWheelCanvas(currentAngle);
+    draftState.spinAngle = currentAngle;
 
     if (progress < 1) {
+      drawWheelCanvas(currentAngle);
       requestAnimationFrame(animate);
     } else {
-      const resultEl = document.getElementById('spin-result');
-      if (resultEl) {
-        resultEl.innerHTML = `⚽ Gewählter Club: <u>${targetClub}</u>`;
-      }
-
-      // Gezogenen Club aus dem aktiven Pool entfernen
-      remainingClubsForDraft.splice(targetIndex, 1);
-
-      setTimeout(() => {
-        const stage = document.getElementById('draft-stage');
-        if (stage) {
-          const nextBtn = document.createElement('button');
-          nextBtn.className = 'btn-primary role-btn';
-          nextBtn.style.marginTop = '15px';
-          nextBtn.innerText = draftCurrentIndex + 1 < draftPairs.length ? 'Weiter zum nächsten Team ➡️' : 'Auslosung abschließen 🎉';
-          nextBtn.onclick = () => {
-            draftCurrentIndex++;
-            renderDraftStep();
-          };
-          stage.appendChild(nextBtn);
-          if (spinBtn) spinBtn.style.display = 'none';
-        }
-      }, 500);
+      draftState.spinning = false;
+      draftState.lastDrawnClub = targetClub;
+      draftState.pairs[draftState.currentIndex].club = targetClub;
+      draftState.remainingClubs.splice(targetIndex, 1);
+      saveData();
     }
   }
 
   requestAnimationFrame(animate);
+}
+
+function nextDraftStep() {
+  if (!isAdmin()) return;
+  draftState.currentIndex++;
+  draftState.lastDrawnClub = null;
+  draftState.spinAngle = 0;
+  saveData();
+}
+
+function finishDraft() {
+  if (!isAdmin()) return;
+  teams = [...draftState.pairs];
+  draftState.active = false;
+  saveData();
+  showTab('teams');
 }
 
 // 7. Standard Admin Handlungen
@@ -549,22 +586,21 @@ function removePlayerPassword(index) {
   }
 }
 
-// 8. Gruppen & KO-Phase Logik (Flexibel je nach Team-Anzahl)
+// 8. Gruppen & KO-Phase Logik
 function drawGroups() {
   if (!isAdmin()) return;
   if (teams.length < 4) return alert('Du benötigst mindestens 4 Teams für Gruppen!');
 
-  // Modus basierend auf Team-Anzahl anbieten
   let choice = prompt(
     `Du hast aktuell ${teams.length} Teams.\n\n` +
     `Wähle den Turniermodus:\n` +
-    `1 = 2 Gruppen (Top 2 je Gruppe gehen ins HALBFINALE)\n` +
-    `2 = 4 Gruppen (Top 2 je Gruppe gehen ins VIERTELFINALE)\n\n` +
+    `1 = 2 Gruppen (Top 2 je Gruppe direkt ins HALBFINALE)\n` +
+    `2 = 4 Gruppen (Top 2 je Gruppe ins VIERTELFINALE)\n\n` +
     `Eingabe (1 oder 2):`, 
     teams.length <= 8 ? "1" : "2"
   );
 
-  if (!choice) return; // Abbrechen gewählt
+  if (!choice) return;
 
   let groupLetters = [];
   if (choice.trim() === "1") {
@@ -577,7 +613,6 @@ function drawGroups() {
 
   if (confirm(`Gruppen neu auslosen (${groupLetters.length} Gruppen) & Spielplan erstellen?`)) {
     const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
-    
     groups = groupLetters.map(letter => ({ letter, teams: [] }));
     
     shuffledTeams.forEach((team, index) => {
@@ -661,32 +696,53 @@ function drawGroups() {
 
 function drawKOPhase() {
   if (!isAdmin()) return;
+  if (groups.length === 2) {
+    return alert('Du spielst im 2-Gruppen-Modus! Klicke direkt auf "Halbfinale auslosen".');
+  }
+
   const standings = calculateGroupStandings();
   const qualified1st = [];
   const qualified2nd = [];
 
   standings.forEach(g => {
-    if (g.rankings.length >= 1) qualified1st.push(g.rankings[0]);
-    if (g.rankings.length >= 2) qualified2nd.push(g.rankings[1]);
+    if (g.rankings.length >= 1) qualified1st.push({ ...g.rankings[0], group: g.letter });
+    if (g.rankings.length >= 2) qualified2nd.push({ ...g.rankings[1], group: g.letter });
   });
 
-  if (qualified1st.length === 0 || qualified2nd.length === 0) {
-    return alert('Nicht genügend Ergebnisse für das Viertelfinale vorhanden!');
+  if (qualified1st.length < 4 || qualified2nd.length < 4) {
+    return alert('Es müssen in allen 4 Gruppen die Gruppenspiele beendet sein!');
   }
 
-  if (confirm('Viertelfinale jetzt auslosen?')) {
-    const shuffled2nd = [...qualified2nd].sort(() => Math.random() - 0.5);
+  if (confirm('Viertelfinale Über-Kreuz auslosen (keine Duelle aus gleicher Gruppe)?')) {
+    let available2nd = [...qualified2nd];
+    let paired2nd = [];
+
+    // Sauberes Über-Kreuz-Matching
+    for (let i = 0; i < qualified1st.length; i++) {
+      let first = qualified1st[i];
+      let possibleOpponents = available2nd.filter(sec => sec.group !== first.group);
+      
+      if (possibleOpponents.length === 0) {
+        // Fallback-Safety
+        possibleOpponents = available2nd;
+      }
+
+      let chosen = possibleOpponents[Math.floor(Math.random() * possibleOpponents.length)];
+      paired2nd.push(chosen);
+      available2nd = available2nd.filter(sec => sec.teamId !== chosen.teamId);
+    }
+
     koMatches = [];
     let matchId = 101;
 
-    for (let i = 0; i < Math.min(qualified1st.length, shuffled2nd.length); i++) {
+    for (let i = 0; i < 4; i++) {
       let court = (i % 2 === 0) ? 'Hauptplatz' : 'Nebenplatz';
       koMatches.push({
         id: matchId++,
         round: 'Viertelfinale',
         court: court,
         t1Id: qualified1st[i].teamId,
-        t2Id: shuffled2nd[i].teamId,
+        t2Id: paired2nd[i].teamId,
         score1: null,
         score2: null,
         played: false
@@ -700,19 +756,18 @@ function drawKOPhase() {
 
 function drawSemifinals() {
   if (!isAdmin()) return;
-
   const standings = calculateGroupStandings();
 
-  // Prüfen, ob Halbfinale direkt aus 2 Gruppen kommt (bei 2 Gruppen)
+  // Direkter Halbfinal-Modus bei 2 Gruppen
   if (groups.length === 2) {
     const groupA = standings.find(g => g.letter === 'Gruppe A');
     const groupB = standings.find(g => g.letter === 'Gruppe B');
 
     if (!groupA || !groupB || groupA.rankings.length < 2 || groupB.rankings.length < 2) {
-      return alert('Es müssen in beiden Gruppen genügend Spiele abgeschlossen sein!');
+      return alert('Es müssen erst alle Gruppenspiele in Gruppe A und B beendet sein!');
     }
 
-    if (confirm('Halbfinale Über-Kreuz erstellen? (A1 vs B2 & B1 vs A2)')) {
+    if (confirm('Halbfinale Über-Kreuz anlegen? (A1 vs B2 & B1 vs A2)')) {
       koMatches = [
         {
           id: 201, round: 'Halbfinale 1', court: 'Hauptplatz',
@@ -734,7 +789,7 @@ function drawSemifinals() {
     return;
   }
 
-  // Standard-Fall (bei 4 Gruppen): aus den 4 Viertelfinal-Siegern
+  // Standard (4 Gruppen) aus Viertelfinal-Siegern
   const qfMatches = koMatches.filter(m => m.round === 'Viertelfinale');
   const winners = [];
 
@@ -803,6 +858,7 @@ function resetTournament() {
     groups = [];
     groupMatches = [];
     koMatches = [];
+    draftState = { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, spinAngle: 0, lastDrawnClub: null };
     saveData();
   }
 }
@@ -886,7 +942,7 @@ function renderTeams() {
 
     return `
       <div class="admin-card ${isMyTeam ? 'highlight-me' : ''}">
-        <div style="display: flex; justify-size: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
           <input type="text" value="${t.name}" 
                  ${canEditName ? '' : 'disabled'} 
                  onchange="updateTeamName(${t.id}, this.value)"
@@ -1010,6 +1066,7 @@ function renderMatches() {
         }
       }
 
+      const isTwoGroupMode = groups.length === 2;
       const qfMatches = koMatches.filter(m => m.round === 'Viertelfinale');
       const qfFinished = qfMatches.length === 4 && qfMatches.every(m => m.played);
       const hasHF = koMatches.some(m => m.round.includes('Halbfinale'));
@@ -1019,9 +1076,12 @@ function renderMatches() {
       const hasFinal = koMatches.some(m => m.round.includes('FINALE'));
 
       if (isAdmin()) {
-        if (qfFinished && !hasHF) {
+        if (isTwoGroupMode && !hasHF) {
+          html += `<button class="btn-primary" style="margin-bottom: 20px;" onclick="drawSemifinals()">🎲 Halbfinale Über-Kreuz auslosen!</button>`;
+        } else if (!isTwoGroupMode && qfFinished && !hasHF) {
           html += `<button class="btn-primary" style="margin-bottom: 20px;" onclick="drawSemifinals()">🎲 Halbfinale jetzt auslosen!</button>`;
         }
+        
         if (hfFinished && !hasFinal) {
           html += `<button class="btn-primary" style="margin-bottom: 20px;" onclick="drawFinals()">🏆 Finale & Spiel um Platz 3 anlegen!</button>`;
         }
