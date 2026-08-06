@@ -29,6 +29,9 @@ window.startInteractiveDraft = startInteractiveDraft;
 window.spinWheel = spinWheel;
 window.nextDraftStep = nextDraftStep;
 window.finishDraft = finishDraft;
+window.placeBet = placeBet;
+window.toggleRulesEdit = toggleRulesEdit;
+window.saveRules = saveRules;
 
 // ==========================================
 // 1. FIREBASE KONFIGURATION & INIT
@@ -56,13 +59,20 @@ const DEFAULT_CLUBS = [
   "FC Liverpool", "Juventus", "Atletico Madrid", "Borussia Dortmund"
 ];
 
+const DEFAULT_RULES = 
+  "1. Halbzeitlänge: 6 Minuten pro Halbzeit.\n" +
+  "2. Steuerung: Tactical Defending ist Pflicht.\n" +
+  "3. Unentschieden in der KO-Phase: Verlängerung & Elfmeterschießen.\n" +
+  "4. Fairplay: Kein Zeitspiel in den letzten 10 Spielminuten!\n" +
+  "5. Schiedsrichterentscheidungen sind unanfechtbar.";
+
 const WHEEL_COLORS = [
   "#e74c3c", "#3498db", "#2ecc71", "#f1c40f", 
   "#9b59b6", "#e67e22", "#1abc9c", "#34495e"
 ];
 
 // ==========================================
-// 2. GLOBALE ZUSTÄNDE & VARIANTE
+// 2. GLOBALE ZUSTÄNDE & VARIABLEN
 // ==========================================
 let players = [];
 let availableClubs = [...DEFAULT_CLUBS];
@@ -70,6 +80,8 @@ let teams = [];
 let groups = [];
 let groupMatches = [];
 let koMatches = [];
+let bets = {}; // { playerName: teamId }
+let rulesText = DEFAULT_RULES;
 let myPlayerName = localStorage.getItem('fifa_my_player') || null;
 let pendingAdminLogin = false;
 
@@ -170,7 +182,7 @@ function enterAsSpectator() {
   const adminBtn = document.getElementById('btn-admin');
   if (adminBtn) adminBtn.style.display = isAdmin() ? 'inline-block' : 'none';
 
-  showTab('teams');
+  showTab('dashboard');
 }
 
 function switchUser() {
@@ -326,6 +338,8 @@ db.ref('tournament').on('value', (snapshot) => {
   groups = data.groups || [];
   groupMatches = data.groupMatches || [];
   koMatches = data.koMatches || [];
+  bets = data.bets || {};
+  rulesText = data.rulesText || DEFAULT_RULES;
   draftState = data.draftState || { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, startTime: null, targetAngle: 0, duration: 4000, lastDrawnClub: null };
 
   renderAll();
@@ -333,7 +347,7 @@ db.ref('tournament').on('value', (snapshot) => {
 });
 
 function saveData() {
-  db.ref('tournament').set({ players, availableClubs, teams, groups, groupMatches, koMatches, draftState });
+  db.ref('tournament').set({ players, availableClubs, teams, groups, groupMatches, koMatches, bets, rulesText, draftState });
 }
 
 // ==========================================
@@ -428,7 +442,6 @@ function handleLiveDraftUI() {
 
   modal.style.display = 'flex';
 
-  // Verhindere das Zerstören des Canvas während einer laufenden Drehung
   const needsReRender = (draftState.currentIndex !== lastRenderedIndex) || 
                         (draftState.spinning !== lastRenderedSpinning) ||
                         (!document.getElementById('wheel-canvas'));
@@ -539,7 +552,7 @@ function drawWheelCanvas(angleInDegrees) {
   const centerY = height / 2;
   const radius = width / 2 - 10;
 
-  const clubs = draftState.remainingClubs || AVAILABLE_CLUBS;
+  const clubs = draftState.remainingClubs || availableClubs;
   const numSegments = clubs.length;
   if (numSegments === 0) return;
 
@@ -953,6 +966,8 @@ function resetTournament() {
     groups = [];
     groupMatches = [];
     koMatches = [];
+    bets = {};
+    rulesText = DEFAULT_RULES;
     draftState = { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, startTime: null, targetAngle: 0, duration: 4000, lastDrawnClub: null };
     saveData();
   }
@@ -1016,13 +1031,181 @@ function updateMatchScore(matchId, isKO, score1Val, score2Val) {
 }
 
 // ==========================================
-// 10. RENDER LOGIK & UI-STEUERUNG
+// 10. TIPP-SPIEL & REGELN LOGIK
+// ==========================================
+function placeBet(teamId) {
+  if (!myPlayerName) {
+    return alert('Du musst angemeldet sein, um einen Tipp abzugeben!');
+  }
+
+  bets[myPlayerName] = parseInt(teamId, 10);
+  saveData();
+}
+
+function toggleRulesEdit() {
+  const display = document.getElementById('rules-display-area');
+  const edit = document.getElementById('rules-edit-area');
+  const textarea = document.getElementById('rules-textarea');
+
+  if (edit.style.display === 'none') {
+    edit.style.display = 'block';
+    display.style.display = 'none';
+    if (textarea) textarea.value = rulesText;
+  } else {
+    edit.style.display = 'none';
+    display.style.display = 'block';
+  }
+}
+
+function saveRules() {
+  const textarea = document.getElementById('rules-textarea');
+  if (!textarea) return;
+
+  rulesText = textarea.value;
+  saveData();
+  toggleRulesEdit();
+}
+
+// ==========================================
+// 11. RENDER LOGIK & UI-STEUERUNG
 // ==========================================
 function renderAll() {
+  renderDashboard();
   renderTeams();
   renderGroups();
   renderMatches();
   renderAdminPanel();
+}
+
+function renderDashboard() {
+  // 1. RULES RENDER
+  const rulesDisplay = document.getElementById('rules-display-area');
+  const editRulesBtn = document.getElementById('btn-edit-rules');
+  if (rulesDisplay) {
+    rulesDisplay.innerText = rulesText || DEFAULT_RULES;
+  }
+  if (editRulesBtn) {
+    editRulesBtn.style.display = isAdmin() ? 'inline-block' : 'none';
+  }
+
+  // 2. WETTBASIS / TIPP-SPIEL RENDER
+  const bettingContainer = document.getElementById('betting-container');
+  if (bettingContainer) {
+    if (teams.length === 0) {
+      bettingContainer.innerHTML = '<p class="empty-state">Tipps können erst abgegeben werden, sobald die Teams feststehen.</p>';
+    } else {
+      const myCurrentBet = myPlayerName ? bets[myPlayerName] : null;
+      
+      // Berechne Votes pro Team
+      const totalVotes = Object.keys(bets).length;
+      const votesPerTeam = {};
+      teams.forEach(t => votesPerTeam[t.id] = 0);
+      Object.values(bets).forEach(tId => {
+        if (votesPerTeam[tId] !== undefined) votesPerTeam[tId]++;
+      });
+
+      let betOptionsHtml = teams.map(t => {
+        const isSelected = myCurrentBet === t.id;
+        const count = votesPerTeam[t.id] || 0;
+        const percent = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+
+        return `
+          <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+            <div>
+              <strong>${t.name}</strong> <small>(${t.p1} & ${t.p2})</small> ${t.club ? `⚽ <em>${t.club}</em>` : ''}
+              <div style="font-size:0.8em; opacity:0.8;">Quoten-Anteil: <strong>${percent}%</strong> (${count} Stimme/n)</div>
+            </div>
+            <button class="${isSelected ? 'btn-primary' : 'btn-secondary'}" style="padding:6px 12px; font-size:0.9em;" onclick="placeBet(${t.id})">
+              ${isSelected ? '✅ Dein Tipp' : 'Tippen 🎯'}
+            </button>
+          </div>
+        `;
+      }).join('');
+
+      bettingContainer.innerHTML = `
+        <p style="font-size:0.9em; opacity:0.9;">Tippe auf das Team, das deiner Meinung nach das Turnier gewinnt!</p>
+        ${betOptionsHtml}
+      `;
+    }
+  }
+
+  // 3. STATS & ANALYTICS DASHBOARD RENDER
+  const statsContainer = document.getElementById('stats-dashboard-container');
+  if (statsContainer) {
+    if (teams.length === 0) {
+      statsContainer.innerHTML = '<p class="empty-state">Sobald Spiele absolviert wurden, erscheinen hier Statistiken.</p>';
+      return;
+    }
+
+    // Statistiken berechnen aus allen gefahrenen Spielen
+    let allMatches = [...groupMatches, ...koMatches].filter(m => m.played);
+    
+    let stats = {};
+    teams.forEach(t => {
+      stats[t.id] = { id: t.id, name: t.name, club: t.club, gf: 0, ga: 0, won: 0, played: 0 };
+    });
+
+    allMatches.forEach(m => {
+      if (stats[m.t1Id]) {
+        stats[m.t1Id].gf += m.score1;
+        stats[m.t1Id].ga += m.score2;
+        stats[m.t1Id].played++;
+        if (m.score1 > m.score2) stats[m.t1Id].won++;
+      }
+      if (stats[m.t2Id]) {
+        stats[m.t2Id].gf += m.score2;
+        stats[m.t2Id].ga += m.score1;
+        stats[m.t2Id].played++;
+        if (m.score2 > m.score1) stats[m.t2Id].won++;
+      }
+    });
+
+    let teamList = Object.values(stats);
+    let topScorer = [...teamList].sort((a,b) => b.gf - a.gf)[0];
+    let bestDefense = [...teamList].sort((a,b) => a.ga - b.ga)[0];
+
+    // KI-Siegchancen Berechnen (Kombination aus Torverhältnis & Siegquote)
+    let totalWinScore = 0;
+    teamList.forEach(t => {
+      let winRate = t.played > 0 ? (t.won / t.played) : 0.5;
+      let diff = t.gf - t.ga;
+      t.powerIndex = Math.max(1, (winRate * 50) + (diff * 2) + 10);
+      totalWinScore += t.powerIndex;
+    });
+
+    teamList.forEach(t => {
+      t.winChance = Math.round((t.powerIndex / totalWinScore) * 100);
+    });
+
+    let bestChanceTeam = [...teamList].sort((a,b) => b.winChance - a.winChance)[0];
+
+    statsContainer.innerHTML = `
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:15px;">
+        
+        <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; text-align:center; border-top:3px solid #f1c40f;">
+          <div style="font-size:0.8em; opacity:0.8;">🔥 Torfabrik (Meiste Tore)</div>
+          <div style="font-weight:bold; font-size:1.1em; margin-top:4px; color:#f1c40f;">
+            ${topScorer && topScorer.gf > 0 ? `${topScorer.name} (${topScorer.gf}⚽)` : 'Noch keine Tore'}
+          </div>
+        </div>
+
+        <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; text-align:center; border-top:3px solid #2ecc71;">
+          <div style="font-size:0.8em; opacity:0.8;">🛡️ Abwehrbollwerk (Wenigste Gegentore)</div>
+          <div style="font-weight:bold; font-size:1.1em; margin-top:4px; color:#2ecc71;">
+            ${bestDefense && bestDefense.played > 0 ? `${bestDefense.name} (${bestDefense.ga} 🥊)` : 'Noch keine Spiele'}
+          </div>
+        </div>
+
+        <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; text-align:center; border-top:3px solid #3498db;">
+          <div style="font-size:0.8em; opacity:0.8;">📈 Höchste KI-Siegchance</div>
+          <div style="font-weight:bold; font-size:1.1em; margin-top:4px; color:#3498db;">
+            ${bestChanceTeam ? `${bestChanceTeam.name} (${bestChanceTeam.winChance}%)` : '-'}
+          </div>
+        </div>
+
+      </div>
+    `;
+  }
 }
 
 function renderTeams() {
