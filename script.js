@@ -964,6 +964,11 @@ function updateMatchScore(matchId, isKO, score1Val, score2Val) {
 
     match.score1 = s1; match.score2 = s2; match.played = true;
 
+    if (s1 !== s2) {
+      const winningTeamId = s1 > s2 ? match.t1Id : match.t2Id;
+      evaluateBetsForMatch(matchId, winningTeamId);
+    }
+
     if (match.round === '🏆 FINALE') {
       const winnerTeamId = s1 > s2 ? match.t1Id : match.t2Id;
       const winnerTeam = teams.find(t => t.id === winnerTeamId);
