@@ -966,7 +966,7 @@ function updateMatchScore(matchId, isKO, score1Val, score2Val) {
 
     match.score1 = s1; match.score2 = s2; match.played = true;
 
-    if (s1 !== s2) {
+    if (s1 !== s2 && canManageMatches()) {
       const winningTeamId = s1 > s2 ? match.t1Id : match.t2Id;
       evaluateBetsForMatch(matchId, winningTeamId);
     }
@@ -1324,7 +1324,12 @@ function renderMatchCard(m, isKO, myTeam) {
         <span>:</span>
         <input type="number" min="0" value="${m.score2 !== null ? m.score2 : ''}" 
                ${canEdit ? '' : 'disabled'} id="score2-${m.id}" placeholder="-" style="width: 60px;">
-        ${canEdit ? `<button class="btn-primary btn-sm" onclick="updateMatchScore(${m.id}, ${isKO}, document.getElementById('score1-${m.id}').value, document.getElementById('score2-${m.id}').value)">Speichern</button>` : ''}
+        ${canEdit ? `
+          <button class="btn-primary btn-sm" onclick="updateMatchScore(${m.id}, ${isKO}, document.getElementById('score1-${m.id}').value, document.getElementById('score2-${m.id}').value)">
+            ${canManageMatches() && m.played ? '✓ Bestätigen & Auszahlen' : 'Speichern'}
+          </button>
+        ` : ''}
+
       </div>
     </div>
   `;
