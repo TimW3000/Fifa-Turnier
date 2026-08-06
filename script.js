@@ -69,9 +69,13 @@ let draftState = {
   currentIndex: 0,
   remainingClubs: [],
   spinning: false,
-  spinAngle: 0,
+  startTime: null,
+  targetAngle: 0,
+  duration: 4000,
   lastDrawnClub: null
 };
+
+let animFrameId = null;
 
 function getPlayerObj(name) {
   if (!name) return null;
@@ -299,7 +303,7 @@ db.ref('tournament').on('value', (snapshot) => {
   groups = data.groups || [];
   groupMatches = data.groupMatches || [];
   koMatches = data.koMatches || [];
-  draftState = data.draftState || { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, spinAngle: 0, lastDrawnClub: null };
+  draftState = data.draftState || { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, startTime: null, targetAngle: 0, duration: 4000, lastDrawnClub: null };
 
   renderAll();
   handleLiveDraftUI();
@@ -373,7 +377,9 @@ function startInteractiveDraft() {
       currentIndex: 0,
       remainingClubs: shuffledClubs,
       spinning: false,
-      spinAngle: 0,
+      startTime: null,
+      targetAngle: 0,
+      duration: 4000,
       lastDrawnClub: null
     };
 
@@ -387,6 +393,7 @@ function handleLiveDraftUI() {
 
   if (!draftState || !draftState.active) {
     modal.style.display = 'none';
+    if (animFrameId) cancelAnimationFrame(animFrameId);
     return;
   }
 
@@ -445,7 +452,38 @@ function renderDraftStep() {
     `}
   `;
 
-  drawWheelCanvas(draftState.spinAngle || 0);
+  startWheelAnimationLoop();
+}
+
+function startWheelAnimationLoop() {
+  if (animFrameId) cancelAnimationFrame(animFrameId);
+
+  function update() {
+    if (!draftState || !draftState.active) return;
+
+    let currentAngle = 0;
+
+    if (draftState.spinning && draftState.startTime) {
+      const now = Date.now();
+      const elapsed = now - draftState.startTime;
+      const progress = Math.min(elapsed / draftState.duration, 1);
+      
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      currentAngle = easeOut * draftState.targetAngle;
+
+      if (progress < 1) {
+        animFrameId = requestAnimationFrame(update);
+      } else {
+        currentAngle = draftState.targetAngle;
+      }
+    } else if (draftState.lastDrawnClub) {
+      currentAngle = draftState.targetAngle;
+    }
+
+    drawWheelCanvas(currentAngle);
+  }
+
+  update();
 }
 
 function drawWheelCanvas(angleOffset) {
@@ -498,41 +536,39 @@ function spinWheel() {
   const totalRotation = (2 * Math.PI * 5) + targetAngleAtTop;
 
   draftState.spinning = true;
+  draftState.startTime = Date.now();
+  draftState.targetAngle = totalRotation;
+  draftState.duration = 4000;
   draftState.lastDrawnClub = null;
   saveData();
 
-  let start = null;
-  const duration = 4000;
-
-  function animate(timestamp) {
-    if (!start) start = timestamp;
-    const progress = Math.min((timestamp - start) / duration, 1);
-    
-    const easeOut = 1 - Math.pow(1 - progress, 3);
-    const currentAngle = easeOut * totalRotation;
-
-    draftState.spinAngle = currentAngle;
-
-    if (progress < 1) {
-      drawWheelCanvas(currentAngle);
-      requestAnimationFrame(animate);
-    } else {
+  // Nach Ablauf der 4 Sekunden speichern wir das Endergebnis (Club wird HIER noch NICHT gelöscht)
+  setTimeout(() => {
+    if (isAdmin() && draftState.spinning) {
       draftState.spinning = false;
       draftState.lastDrawnClub = targetClub;
       draftState.pairs[draftState.currentIndex].club = targetClub;
-      draftState.remainingClubs.splice(targetIndex, 1);
       saveData();
     }
-  }
-
-  requestAnimationFrame(animate);
+  }, 4100);
 }
 
 function nextDraftStep() {
   if (!isAdmin()) return;
+
+  // HIER löschen wir den Club erst sauber heraus, wenn es weitergeht!
+  if (draftState.lastDrawnClub) {
+    const idx = draftState.remainingClubs.indexOf(draftState.lastDrawnClub);
+    if (idx !== -1) {
+      draftState.remainingClubs.splice(idx, 1);
+    }
+  }
+
   draftState.currentIndex++;
   draftState.lastDrawnClub = null;
-  draftState.spinAngle = 0;
+  draftState.targetAngle = 0;
+  draftState.startTime = null;
+  draftState.spinning = false;
   saveData();
 }
 
@@ -717,13 +753,11 @@ function drawKOPhase() {
     let available2nd = [...qualified2nd];
     let paired2nd = [];
 
-    // Sauberes Über-Kreuz-Matching
     for (let i = 0; i < qualified1st.length; i++) {
       let first = qualified1st[i];
       let possibleOpponents = available2nd.filter(sec => sec.group !== first.group);
       
       if (possibleOpponents.length === 0) {
-        // Fallback-Safety
         possibleOpponents = available2nd;
       }
 
@@ -758,7 +792,6 @@ function drawSemifinals() {
   if (!isAdmin()) return;
   const standings = calculateGroupStandings();
 
-  // Direkter Halbfinal-Modus bei 2 Gruppen
   if (groups.length === 2) {
     const groupA = standings.find(g => g.letter === 'Gruppe A');
     const groupB = standings.find(g => g.letter === 'Gruppe B');
@@ -771,14 +804,14 @@ function drawSemifinals() {
       koMatches = [
         {
           id: 201, round: 'Halbfinale 1', court: 'Hauptplatz',
-          t1Id: groupA.rankings[0].teamId, // A1
-          t2Id: groupB.rankings[1].teamId, // B2
+          t1Id: groupA.rankings[0].teamId,
+          t2Id: groupB.rankings[1].teamId,
           score1: null, score2: null, played: false
         },
         {
           id: 202, round: 'Halbfinale 2', court: 'Nebenplatz',
-          t1Id: groupB.rankings[0].teamId, // B1
-          t2Id: groupA.rankings[1].teamId, // A2
+          t1Id: groupB.rankings[0].teamId,
+          t2Id: groupA.rankings[1].teamId,
           score1: null, score2: null, played: false
         }
       ];
@@ -789,7 +822,6 @@ function drawSemifinals() {
     return;
   }
 
-  // Standard (4 Gruppen) aus Viertelfinal-Siegern
   const qfMatches = koMatches.filter(m => m.round === 'Viertelfinale');
   const winners = [];
 
@@ -858,7 +890,7 @@ function resetTournament() {
     groups = [];
     groupMatches = [];
     koMatches = [];
-    draftState = { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, spinAngle: 0, lastDrawnClub: null };
+    draftState = { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, startTime: null, targetAngle: 0, duration: 4000, lastDrawnClub: null };
     saveData();
   }
 }
