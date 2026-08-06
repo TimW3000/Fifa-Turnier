@@ -49,9 +49,9 @@ const db = firebase.database();
 const ADMIN_PASSWORD = "1234";
 
 const DEFAULT_CLUBS = [
-  "Real Madrid", "FC Bayern", "Manchester City", "Arsenal", 
-  "FC Barcelona", "PSG", "Inter Mailand", "Bayer Leverkusen",
-  "FC Liverpool", "Juventus", "Atletico Madrid", "Borussia Dortmund"
+  "Real Madrid", "FC Bayern", "ManCity", "Arsenal", 
+  "FC Barcelona", "PSG", "Inter Mailand", "Leverkusen",
+  "Liverpool", "ManU", "Atletico", "BVB"
 ];
 
 const DEFAULT_RULES = "Noch keine Regeln festgelegt. Der Admin kann sie hier eintragen.";
