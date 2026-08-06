@@ -1150,3 +1150,114 @@ document.addEventListener('DOMContentLoaded', () => {
   initFirebaseListener();
   renderAll();
 });
+
+// ==========================================
+// INITIALISIERUNG & EVNET-LISTENER FÜR RECHTE/STARTSEITE
+// ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+  
+  // 1. "Ich habe mich bereits eingetragen"
+  const btnShowExisting = document.getElementById('btn-show-existing');
+  if (btnShowExisting) {
+    btnShowExisting.addEventListener('click', () => {
+      document.getElementById('role-options').style.display = 'none';
+      document.getElementById('existing-players-select').style.display = 'block';
+      renderExistingPlayersList(); // Baut die Namensliste auf
+    });
+  }
+
+  // 2. "Ich bin neu hier / Jetzt eintragen"
+  const btnShowNew = document.getElementById('btn-show-new');
+  if (btnShowNew) {
+    btnShowNew.addEventListener('click', () => {
+      document.getElementById('role-options').style.display = 'none';
+      document.getElementById('new-player-select').style.display = 'block';
+    });
+  }
+
+  // 3. "Nur als Zuschauer reinschauen"
+  const btnSpectator = document.getElementById('btn-enter-spectator');
+  if (btnSpectator) {
+    btnSpectator.addEventListener('click', () => {
+      closeRoleModal();
+    });
+  }
+
+  // 4. Zurück-Buttons im Modal
+  document.querySelectorAll('.btn-reset-role').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('existing-players-select').style.display = 'none';
+      document.getElementById('new-player-select').style.display = 'none';
+      document.getElementById('admin-password-select').style.display = 'none';
+      document.getElementById('role-options').style.display = 'block';
+    });
+  });
+
+  // 5. Neuen Spieler eintragen & Weiter
+  const btnRegisterNew = document.getElementById('btn-register-new');
+  if (btnRegisterNew) {
+    btnRegisterNew.addEventListener('click', () => {
+      const input = document.getElementById('self-player-name');
+      const name = input ? input.value.trim() : '';
+      if (!name) return alert('Bitte gib deinen Namen ein!');
+      
+      // Prüfen ob Spieler existiert
+      if (!players.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+        players.push({ name: name, isRef: false, password: '' });
+        saveData();
+      }
+      
+      loginAsPlayer(name);
+      closeRoleModal();
+    });
+  }
+
+  // Beim Start prüfen, ob bereits eingeloggt
+  if (myPlayerName) {
+    closeRoleModal();
+  } else {
+    showRoleModal();
+  }
+  
+  // Firebase initialisieren
+  initFirebaseListener();
+});
+
+// Hilfsfunktionen für das Login-Modal
+function showRoleModal() {
+  const modal = document.getElementById('role-selection-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeRoleModal() {
+  const modal = document.getElementById('role-selection-modal');
+  if (modal) modal.style.display = 'none';
+  
+  // Zeige App-Header, Nav und Main
+  document.getElementById('app-header').style.display = 'flex';
+  document.getElementById('app-nav').style.display = 'flex';
+  document.getElementById('app-main').style.display = 'block';
+  
+  updateUserStatusDisplay();
+}
+
+function renderExistingPlayersList() {
+  const container = document.getElementById('existing-players-list');
+  if (!container) return;
+  
+  if (players.length === 0) {
+    container.innerHTML = '<p style="opacity:0.7;">Noch keine Spieler eingetragen.</p>';
+    return;
+  }
+  
+  container.innerHTML = players.map(p => `
+    <button class="btn-secondary" style="width:100%; margin-bottom:6px; text-align:left;" onclick="selectExistingPlayer('${p.name}')">
+      👤 ${p.name}
+    </button>
+  `).join('');
+}
+
+function selectExistingPlayer(name) {
+  loginAsPlayer(name);
+  closeRoleModal();
+}
