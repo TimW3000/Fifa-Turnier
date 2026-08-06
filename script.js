@@ -920,6 +920,8 @@ function resetTournament() {
     koMatches = [];
     tips = {};
     draftState = { active: false, pairs: [], currentIndex: 0, remainingClubs: [], spinning: false, startTime: null, targetAngle: 0, duration: 4000, lastDrawnClub: null };
+    userBalances = {}; // Setzt alle Kontostände zurück (jeder startet wieder bei 100)
+    bets = [];         // Löscht alle aktiven Wetten
     saveData();
   }
 }
